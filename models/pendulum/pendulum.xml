@@ -1,11 +1,14 @@
 <mujoco model="pendulum">
-  <compiler angle="radian"/>
-  <statistic meansize="0.5004" extent="1.0008" center="0 0 -0.5"/>
   <worldbody>
     <body name="pendulum_link">
-      <inertial pos="0 0 -0.5" mass="1" diaginertia="0.083433 0.083433 0.0002"/>
-      <joint name="pendulum_joint" pos="0 0 0" axis="0 0 1" range="-3.1416 3.1416"/>
-      <geom size="0.02 0.5" pos="0 0 -0.5" type="cylinder"/>
+      <inertial pos="0 0 -0.5" mass="1" diaginertia="0.083433 0.083433 0.0002" />
+      <joint name="pendulum_joint" type="hinge" axis="0 1 0" />
+      <geom size="0.02 0.5" pos="0 0 -0.5" type="cylinder" rgba= "1 0 0 1" />
     </body>
+    <light name="top" pos="0 0 1" />
+    <light name="front" pos="0 1 0" />
   </worldbody>
+  <actuator>
+    <motor name="pendulum_joint" joint="pendulum_joint" gear="10"/>
+  </actuator>
 </mujoco>
