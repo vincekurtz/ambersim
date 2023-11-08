@@ -1,3 +1,5 @@
+import functools
+from datetime import datetime
 from typing import Tuple
 
 import jax
@@ -185,7 +187,6 @@ class Pendulum(MjxEnv):
 
 def visualize_open_loop():
     """Save a video of an open-loop trajectory, using just mujoco."""
-    # Set up a model and a renderer
     mj_model = load_mj_model_from_file("models/pendulum/pendulum.xml")
     mj_data = mujoco.MjData(mj_model)
     renderer = mujoco.Renderer(mj_model)
@@ -207,5 +208,57 @@ def visualize_open_loop():
     media.write_video("pendulum_open_loop.mp4", frames, fps=fps)
 
 
+def train():
+    """Train a policy to swing up the pendulum, then save the trained policy."""
+    print("Creating pendulum environment...")
+    envs.register_environment("pendulum", Pendulum)
+    env = envs.get_environment("pendulum")
+
+    # Create the PPO agent
+    print("Creating PPO agent...")
+    train_fn = functools.partial(
+        ppo.train,
+        num_timesteps=10,
+        episode_length=1000,
+        seed=0,
+    )
+
+    x_data = []
+    y_data = []
+    ydataerr = []
+    times = [datetime.now()]
+
+    max_y, min_y = 13000, 0
+
+    def progress(num_steps, metrics):
+        print("Step:", num_steps, "Reward:", metrics["eval/episode_reward"], "Std:", metrics["eval/episode_reward_std"])
+
+        times.append(datetime.now())
+        x_data.append(num_steps)
+        y_data.append(metrics["eval/episode_reward"])
+        ydataerr.append(metrics["eval/episode_reward_std"])
+
+        plt.xlim([0, train_fn.keywords["num_timesteps"] * 1.25])
+        plt.ylim([min_y, max_y])
+
+        plt.xlabel("# environment steps")
+        plt.ylabel("reward per episode")
+        plt.title(f"y={y_data[-1]:.3f}")
+
+        plt.errorbar(x_data, y_data, yerr=ydataerr)
+
+    print("Training...")
+    make_inference_fn, params, _ = train_fn(environment=env, progress_fn=progress)
+
+    print(f"time to jit: {times[1] - times[0]}")
+    print(f"time to train: {times[-1] - times[1]}")
+
+    # Save the trained policy
+    print("Saving trained policy...")
+    model_path = "/tmp/mjx_brax_policy"
+    model.save_params(model_path, params)
+
+
 if __name__ == "__main__":
-    visualize_open_loop()
+    # visualize_open_loop()
+    train()
