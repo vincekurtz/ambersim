@@ -101,6 +101,8 @@ def load_mj_model_from_file(filepath: Union[str, Path], force_float: bool = Fals
 def mj_to_mjx_model(mj_model: mj.MjModel) -> Tuple[mjx.Model, mjx.Data]:
     """Converts a mujoco model to an mjx (model, data) pair."""
     try:
+        # Set the solver type to CG
+        mj_model.opt.solver = mj.mjtSolver.mjSOL_CG
         mjx_model = mjx.device_put(mj_model)
         mjx_data = mjx.make_data(mjx_model)
         return mjx_model, mjx_data
