@@ -185,8 +185,10 @@ class Pendulum(MjxEnv):
         return state.replace(pipeline_state=data, obs=obs, reward=reward, done=done)
 
     def _get_obs(self, data: mjx.Data, action: jp.ndarray) -> jp.ndarray:
-        """Return the observation, which is the current state."""
-        return jp.concatenate([data.qpos, data.qvel])
+        """Return the observation, [cos(theta), sin(theta), theta_dot]."""
+        theta = data.qpos[0]
+        theta_dot = data.qvel[0]
+        return jp.array([jp.cos(theta), jp.sin(theta), theta_dot])
 
 
 def visualize_open_loop(start_angle=0.0):
@@ -230,11 +232,13 @@ def train():
         reward_scaling=0.1,
         episode_length=1000,
         normalize_observations=True,
+        action_repeat=1,
+        unroll_length=10,
         num_minibatches=32,
         num_updates_per_batch=8,
         discounting=0.97,
         learning_rate=3e-4,
-        entropy_cost=1e-3,
+        entropy_cost=0,
         num_envs=128,
         batch_size=64,
         seed=0,
@@ -286,7 +290,7 @@ def train():
     plt.show()
 
 
-def test(start_angle=1.2, duration=10):
+def test(start_angle=0.0):
     """Load a trained policy and run a little sim with it."""
     # Create an environment for evaluation
     print("Creating test environment...")
@@ -320,7 +324,7 @@ def test(start_angle=1.2, duration=10):
     print("Running sim...")
     num_steps = 1000
     fps = 60
-    render_every = int(1.0 / (mj_model.opt.timestep * fps))
+    render_every = int(1.0 / (env.dt * fps))
     frames = []
 
     for k in range(num_steps):
@@ -331,10 +335,11 @@ def test(start_angle=1.2, duration=10):
 
         # Compute the control action for the next step
         ctrl, _ = jit_policy(obs, act_rng)
+        mj_data.ctrl = ctrl
 
         # Step the simulation
-        mj_data.ctrl = ctrl
-        mujoco.mj_step(mj_model, mj_data)
+        for _ in range(env._physics_steps_per_control_step):
+            mujoco.mj_step(mj_model, mj_data)
 
         if k % render_every == 0:
             # Add an image of the scene to the video
@@ -348,5 +353,5 @@ def test(start_angle=1.2, duration=10):
 
 if __name__ == "__main__":
     # visualize_open_loop(np.pi-0.01)
-    # train()
-    test(duration=3)
+    train()
+    test()
