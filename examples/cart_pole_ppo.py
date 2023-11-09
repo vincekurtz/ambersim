@@ -284,8 +284,7 @@ def test(start_angle=0.0):
     # Run a little sim
     print("Running sim...")
     num_steps = 200
-    fps = 60
-    render_every = int(1.0 / (env.dt * fps))
+    render_every = 2
     frames = []
 
     for k in range(num_steps):
@@ -309,10 +308,11 @@ def test(start_angle=0.0):
             frames.append(frame)
 
     print("Saving video...")
+    fps = 1.0 / (env.dt * render_every)
     media.write_video("cart_pole_controlled.mp4", frames, fps=fps)
 
 
 if __name__ == "__main__":
-    visualize_open_loop(0.0)
+    # visualize_open_loop(0.0)
     # train()
-    # test()
+    test()
