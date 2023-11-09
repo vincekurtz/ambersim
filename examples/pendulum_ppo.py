@@ -104,10 +104,10 @@ class Pendulum(MjxEnv):
 
     def __init__(
         self,
-        control_cost_weight=0.1,
+        control_cost_weight=0.001,
         theta_cost_weight=1.0,
-        theta_dot_cost_weight=1.0,
-        reset_noise_scale=0.1,
+        theta_dot_cost_weight=0.1,
+        reset_noise_scale=2.0,
         **kwargs,
     ):
         """Initializes the pendulum environment.
@@ -148,6 +148,7 @@ class Pendulum(MjxEnv):
         obs = self._get_obs(data, jp.zeros(self.sys.nu))
         reward, done, zero = jp.zeros(3)
         metrics = {
+            "reward": zero,
             "reward_theta": zero,
             "reward_theta_dot": zero,
             "reward_ctrl": zero,
@@ -170,9 +171,10 @@ class Pendulum(MjxEnv):
         reward = reward_theta + reward_theta_dot + reward_ctrl
 
         obs = self._get_obs(data, action)
-        done = 1.0
+        done = 0.0
 
         state.metrics.update(
+            reward=reward,
             reward_theta=reward_theta,
             reward_theta_dot=reward_theta_dot,
             reward_ctrl=reward_ctrl,
@@ -187,14 +189,14 @@ class Pendulum(MjxEnv):
         return jp.concatenate([data.qpos, data.qvel])
 
 
-def visualize_open_loop():
+def visualize_open_loop(start_angle=0.0):
     """Save a video of an open-loop trajectory, using just mujoco."""
     mj_model = load_mj_model_from_file("models/pendulum/pendulum.xml")
     mj_data = mujoco.MjData(mj_model)
     renderer = mujoco.Renderer(mj_model)
 
     # Set the initial state
-    mj_data.qpos[0] = 1.2
+    mj_data.qpos[0] = start_angle
 
     # Simulate a trajectory
     duration = 3.0  # seconds
@@ -223,13 +225,12 @@ def train():
         num_timesteps=100_000,
         num_evals=50,
         reward_scaling=0.1,
-        episode_length=200,
+        episode_length=1000,
         normalize_observations=True,
-        unroll_length=5,
         num_minibatches=32,
         num_updates_per_batch=8,
         discounting=0.97,
-        learning_rate=1e-3,
+        learning_rate=3e-4,
         entropy_cost=1e-3,
         num_envs=128,
         batch_size=64,
@@ -243,7 +244,14 @@ def train():
 
     def progress(num_steps, metrics):
         """Helper function for recording training progress."""
-        print("Step:", num_steps, "Reward:", metrics["eval/episode_reward"], "Std:", metrics["eval/episode_reward_std"])
+        print(
+            "    Step:",
+            num_steps,
+            "Reward:",
+            metrics["eval/episode_reward"],
+            "Std:",
+            metrics["eval/episode_reward_std"],
+        )
 
         times.append(datetime.now())
         x_data.append(num_steps)
@@ -259,10 +267,12 @@ def train():
         plt.errorbar(x_data, y_data, yerr=ydataerr)
 
     print("Training...")
-    make_inference_fn, params, _ = train_fn(environment=env, progress_fn=progress)
+    make_inference_fn, params, metrics = train_fn(environment=env, progress_fn=progress)
 
-    print(f"time to jit: {times[1] - times[0]}")
-    print(f"time to train: {times[-1] - times[1]}")
+    print(f"  time to jit: {times[1] - times[0]}")
+    print(f"  time to train: {times[-1] - times[1]}")
+
+    print("  Metrics: ", metrics)
 
     # Save the trained policy
     print("Saving trained policy...")
@@ -273,7 +283,7 @@ def train():
     plt.show()
 
 
-def test():
+def test(start_angle=1.2, duration=10):
     """Load a trained policy and run a little sim with it."""
     # Create an environment for evaluation
     print("Creating test environment...")
@@ -300,11 +310,11 @@ def test():
     jit_policy = jax.jit(policy)
 
     # Set the initial state
-    mj_data.qpos[0] = 1.2
+    mj_data.qpos[0] = start_angle
+    mj_data.qvel[0] = 0.0
 
     # Run a little sim
     print("Running sim...")
-    duration = 3.0  # seconds
     fps = 60
     frames = []
     while mj_data.time < duration:
@@ -330,6 +340,6 @@ def test():
 
 
 if __name__ == "__main__":
-    # visualize_open_loop()
-    train()
+    # visualize_open_loop(np.pi-0.01)
+    # train()
     test()
