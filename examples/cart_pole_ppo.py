@@ -208,7 +208,7 @@ def train():
 
     # Set up tensorboard logging
     print("Setting up tensorboard...")
-    writer = SummaryWriter("/tmp/mjx_brax_logs", "cart_pole_ppo")
+    writer = SummaryWriter("/tmp/mjx_brax_logs/cart_pole")
 
     times = [datetime.now()]
 
@@ -222,22 +222,16 @@ def train():
         times.append(datetime.now())
 
         # Write all the metrics to tensorboard
-        writer.add_scalar("reward", float(reward), num_steps)
-
-        # for key, val in metrics.items():
-        #    print(type(key), key)
-        #    print(type(val), val)
-        #    if isinstance(val, jax.Array):
-        #        val = float(val[0])
-        #    writer.add_scalar(key, val, num_steps)
+        for key, val in metrics.items():
+            if isinstance(val, jax.Array):
+                val = float(val)
+            writer.add_scalar(key, val, num_steps)
 
     print("Training...")
     make_inference_fn, params, metrics = train_fn(environment=env, progress_fn=progress)
 
     print(f"  time to jit: {times[1] - times[0]}")
     print(f"  time to train: {times[-1] - times[1]}")
-
-    print("  Metrics: ", metrics)
 
     # Save the trained policy
     print("Saving trained policy...")
