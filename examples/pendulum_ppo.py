@@ -199,13 +199,16 @@ def visualize_open_loop(start_angle=0.0):
     mj_data.qpos[0] = start_angle
 
     # Simulate a trajectory
-    duration = 3.0  # seconds
+    num_steps = 1000
     fps = 60
+    render_every = int(1.0 / (mj_model.opt.timestep * fps))
     frames = []
-    while mj_data.time < duration:
+
+    for k in range(num_steps):
         mujoco.mj_step(mj_model, mj_data)
-        if len(frames) < mj_data.time * fps:
-            renderer.update_scene(mj_data)
+        renderer.update_scene(mj_data)
+
+        if k % render_every == 0:
             frame = renderer.render()
             frames.append(frame)
 
@@ -315,9 +318,12 @@ def test(start_angle=1.2, duration=10):
 
     # Run a little sim
     print("Running sim...")
+    num_steps = 1000
     fps = 60
+    render_every = int(1.0 / (mj_model.opt.timestep * fps))
     frames = []
-    while mj_data.time < duration:
+
+    for k in range(num_steps):
         act_rng, rng = jax.random.split(rng)
 
         # Get the last observation
@@ -330,7 +336,8 @@ def test(start_angle=1.2, duration=10):
         mj_data.ctrl = ctrl
         mujoco.mj_step(mj_model, mj_data)
 
-        if len(frames) < mj_data.time * fps:
+        if k % render_every == 0:
+            # Add an image of the scene to the video
             renderer.update_scene(mj_data)
             frame = renderer.render()
             frames.append(frame)
@@ -342,4 +349,4 @@ def test(start_angle=1.2, duration=10):
 if __name__ == "__main__":
     # visualize_open_loop(np.pi-0.01)
     # train()
-    test()
+    test(duration=3)
