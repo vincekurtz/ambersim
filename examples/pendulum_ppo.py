@@ -11,6 +11,8 @@ from brax import envs
 from brax.base import Motion, Transform
 from brax.envs.base import Env, State
 from brax.io import model
+from brax.training.acme import running_statistics
+from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.ppo import train as ppo
 from etils import epath
 from jax import numpy as jp
@@ -251,6 +253,9 @@ def train():
     print("Training...")
     make_inference_fn, params, _ = train_fn(environment=env, progress_fn=progress)
 
+    print(make_inference_fn)
+    print(type(make_inference_fn))
+
     print(f"time to jit: {times[1] - times[0]}")
     print(f"time to train: {times[-1] - times[1]}")
 
@@ -262,14 +267,56 @@ def train():
 
 def test():
     """Load a trained policy and run a little sim with it."""
-    policy_path = "/tmp/mjx_brax_policy"
-    params = model.load_params(policy_path)
+    # Load the saved policy weights
+    params = model.load_params("/tmp/mjx_brax_policy")
 
-    print(len(params))
-    print(type(params[0]))
-    print(type(params[1]))
+    # Create the policy network
+    # TODO(vincekurtz): figure out how to save make_inference_fn when we train
+    network_factory = ppo_networks.make_ppo_networks
+    normalize = running_statistics.normalize
+    ppo_network = network_factory(2, 1, preprocess_observations_fn=normalize)  # TODO: get from env
+    make_inference_fn = ppo_networks.make_inference_fn(ppo_network)
+    policy = make_inference_fn(params)
+    jit_policy = jax.jit(policy)
+
+    # Create an environment for evaluation
+    envs.register_environment("pendulum", Pendulum)
+    env = envs.get_environment("pendulum")
+    mj_model = env.model
+    mj_data = mujoco.MjData(mj_model)
+    renderer = mujoco.Renderer(mj_model)
+    rng = jax.random.PRNGKey(0)
+    ctrl = jp.zeros(mj_model.nu)
+
+    # Set the initial state
+    mj_data.qpos[0] = 1.2
+
+    # Run a little sim
+    duration = 3.0  # seconds
+    fps = 60
+    frames = []
+    while mj_data.time < duration:
+        act_rng, rng = jax.random.split(rng)
+
+        # Get the last observation
+        obs = env._get_obs(mjx.device_put(mj_data), ctrl)
+
+        # Compute the control action for the next step
+        ctrl, _ = jit_policy(obs, act_rng)
+
+        # Step the simulation
+        mj_data.ctrl = ctrl
+        mujoco.mj_step(mj_model, mj_data)
+
+        if len(frames) < mj_data.time * fps:
+            renderer.update_scene(mj_data)
+            frame = renderer.render()
+            frames.append(frame)
+
+    media.write_video("pendulum_controlled.mp4", frames, fps=fps)
 
 
 if __name__ == "__main__":
     # visualize_open_loop()
+    # train()
     test()
