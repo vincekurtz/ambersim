@@ -16,6 +16,7 @@ from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.ppo import train as ppo
 from jax import numpy as jp
 from mujoco import mjx
+from torch.utils.tensorboard import SummaryWriter
 
 from ambersim.utils.io_utils import load_mj_model_from_file
 
@@ -137,8 +138,9 @@ class CartPole(MjxEnv):
         data = self.pipeline_step(data0, action)
         obs = self._get_obs(data, action)
 
-        reward = 1.0
-        done = jp.where(jp.abs(obs[1]) > 0.2, 1.0, 0.0)
+        theta = obs[1]
+        reward = -1 * theta * theta
+        done = jp.where(jp.abs(theta) > 0.5, 1.0, 0.0)
 
         state.metrics.update(
             reward=reward,
@@ -158,7 +160,7 @@ def visualize_open_loop(start_angle=0.0):
     renderer = mujoco.Renderer(mj_model)
 
     # Set the initial state
-    mj_data.qpos[0] = start_angle
+    mj_data.qpos[1] = start_angle
 
     # Simulate a trajectory
     num_steps = 500
@@ -189,7 +191,7 @@ def train():
         ppo.train,
         num_timesteps=100_000,
         num_evals=20,
-        reward_scaling=10,
+        reward_scaling=1,
         episode_length=1000,
         normalize_observations=True,
         action_repeat=1,
@@ -201,37 +203,33 @@ def train():
         entropy_cost=1e-2,
         num_envs=2048,
         batch_size=1024,
-        seed=0,
+        seed=1,
     )
 
-    x_data = []
-    y_data = []
-    ydataerr = []
+    # Set up tensorboard logging
+    print("Setting up tensorboard...")
+    writer = SummaryWriter("/tmp/mjx_brax_logs", "cart_pole_ppo")
+
     times = [datetime.now()]
 
     def progress(num_steps, metrics):
         """Helper function for recording training progress."""
-        print(
-            "    Step:",
-            num_steps,
-            "Reward:",
-            metrics["eval/episode_reward"],
-            "Std:",
-            metrics["eval/episode_reward_std"],
-        )
+        reward = metrics["eval/episode_reward"]
+        std = metrics["eval/episode_reward_std"]
+        print(f"    Step: {num_steps},  Reward: {reward:.3f},  Std: {std:.3f}")
 
+        # Record the current wall clock time
         times.append(datetime.now())
-        x_data.append(num_steps)
-        y_data.append(metrics["eval/episode_reward"])
-        ydataerr.append(metrics["eval/episode_reward_std"])
 
-        plt.xlim([0, train_fn.keywords["num_timesteps"] * 1.25])
+        # Write all the metrics to tensorboard
+        writer.add_scalar("reward", float(reward), num_steps)
 
-        plt.xlabel("# environment steps")
-        plt.ylabel("reward per episode")
-        plt.title(f"y={y_data[-1]:.3f}")
-
-        plt.errorbar(x_data, y_data, yerr=ydataerr)
+        # for key, val in metrics.items():
+        #    print(type(key), key)
+        #    print(type(val), val)
+        #    if isinstance(val, jax.Array):
+        #        val = float(val[0])
+        #    writer.add_scalar(key, val, num_steps)
 
     print("Training...")
     make_inference_fn, params, metrics = train_fn(environment=env, progress_fn=progress)
@@ -245,9 +243,6 @@ def train():
     print("Saving trained policy...")
     model_path = "/tmp/mjx_brax_policy"
     model.save_params(model_path, params)
-
-    # Show the learning curves
-    plt.show()
 
 
 def test(start_angle=0.0):
@@ -277,8 +272,7 @@ def test(start_angle=0.0):
     jit_policy = jax.jit(policy)
 
     # Set the initial state
-    mj_data.qpos[0] = start_angle
-    mj_data.qvel[0] = 0.0
+    mj_data.qpos[1] = start_angle
 
     # Run a little sim
     print("Running sim...")
@@ -314,4 +308,4 @@ def test(start_angle=0.0):
 if __name__ == "__main__":
     # visualize_open_loop(0.0)
     train()
-    test()
+    test(0.2)
