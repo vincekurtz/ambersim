@@ -14,7 +14,6 @@ from brax.io import model
 from brax.training.acme import running_statistics
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.ppo import train as ppo
-from etils import epath
 from jax import numpy as jp
 from mujoco import mjx
 
@@ -189,19 +188,19 @@ def train():
     train_fn = functools.partial(
         ppo.train,
         num_timesteps=100_000,
-        num_evals=50,
-        reward_scaling=0.1,
+        num_evals=20,
+        reward_scaling=10,
         episode_length=1000,
         normalize_observations=True,
         action_repeat=1,
-        unroll_length=10,
+        unroll_length=5,
         num_minibatches=32,
-        num_updates_per_batch=8,
+        num_updates_per_batch=4,
         discounting=0.97,
         learning_rate=3e-4,
-        entropy_cost=0,
-        num_envs=128,
-        batch_size=64,
+        entropy_cost=1e-2,
+        num_envs=2048,
+        batch_size=1024,
         seed=0,
     )
 
@@ -314,5 +313,5 @@ def test(start_angle=0.0):
 
 if __name__ == "__main__":
     # visualize_open_loop(0.0)
-    # train()
+    train()
     test()
