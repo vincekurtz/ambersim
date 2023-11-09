@@ -8,14 +8,10 @@ from dm_control import mjcf
 from mujoco import mjx
 
 from ambersim import ROOT
+from ambersim.utils._internal_utils import _rmtree
+from ambersim.utils.conversion_utils import convex_decomposition_file, save_model_xml
 from ambersim.utils.introspection_utils import get_joint_names
-from ambersim.utils.io_utils import (
-    _modify_robot_float_base,
-    _rmtree,
-    convex_decomposition_file,
-    load_mjx_model_from_file,
-    save_model_xml,
-)
+from ambersim.utils.io_utils import _modify_robot_float_base, load_mjx_model_and_data_from_file
 
 
 def test_load_model():
@@ -26,19 +22,19 @@ def test_load_model():
 
     # creating temporary local file to test local paths
     local_dir = Path("_test_local")
-    local_dir.mkdir(parents=True, exist_ok=False)
+    local_dir.mkdir(parents=True, exist_ok=True)
     with Path(local_path).open("w", encoding="utf-8") as f:
         f.write(Path(global_path).read_text())
 
     # string paths
-    assert load_mjx_model_from_file(global_path)
-    assert load_mjx_model_from_file(local_path)
-    assert load_mjx_model_from_file(repo_path)
+    assert load_mjx_model_and_data_from_file(global_path)
+    assert load_mjx_model_and_data_from_file(local_path)
+    assert load_mjx_model_and_data_from_file(repo_path)
 
     # Path paths
-    assert load_mjx_model_from_file(Path(global_path))
-    assert load_mjx_model_from_file(Path(local_path))
-    assert load_mjx_model_from_file(Path(repo_path))
+    assert load_mjx_model_and_data_from_file(Path(global_path))
+    assert load_mjx_model_and_data_from_file(Path(local_path))
+    assert load_mjx_model_and_data_from_file(Path(repo_path))
 
     # remove temp local dir
     _rmtree(local_dir)
@@ -48,14 +44,15 @@ def test_all_models():
     """Tests the loading of all models in the repo."""
     filepaths = (p.resolve() for p in Path(ROOT + "/models").glob("**/*") if p.suffix in {".urdf", ".xml"})
     for filepath in filepaths:
-        assert load_mjx_model_from_file(filepath)
+        assert load_mjx_model_and_data_from_file(filepath)
+        assert load_mjx_model_and_data_from_file(filepath, force_float=True)
 
 
 def test_save_xml():
     """Tests saving a URDF as an XML."""
     # saving a URDF as XML + verifying it loads into mjx
     save_model_xml(ROOT + "/models/pendulum/pendulum.urdf")
-    assert load_mjx_model_from_file("pendulum.xml")
+    assert load_mjx_model_and_data_from_file("pendulum.xml")
     Path.unlink("pendulum.xml")  # deleting test file
 
 
@@ -72,9 +69,10 @@ def test_force_float():
     <mujoco model="parent">
       <worldbody>
         <body>
+          <inertial pos="0 0 0" mass="1" diaginertia="1 1 1"/>
           <geom name="foo" type="box" pos="-0.2 0 0.3" size="0.5 0.3 0.1"/>
-          <site name="attachment_site" pos="1. 2. 3." quat="1. 0. 0. 1."/>
           <body name="child" pos="1. 2. 3." quat="1. 0. 0. 1.">
+            <inertial pos="0 0 0" mass="2" diaginertia="1 1 1"/>
             <geom name="my_box" type="box" pos="0.5 0.25 1." size="0.1 0.2 0.3"/>
           </body>
         </body>
@@ -90,10 +88,10 @@ def test_force_float():
     assert "freejoint" in combined2
 
     # case 3: add a freejoint to a URDF model with assets (much trickier b/c of file paths)
-    _, data_unfree = load_mjx_model_from_file("models/barrett_hand/bh280.urdf", force_float=False)
+    _, data_unfree = load_mjx_model_and_data_from_file("models/barrett_hand/bh280.urdf", force_float=False)
     assert len(data_unfree.qpos) == 8  # 8 DOFs for the joints
 
-    _, data_free = load_mjx_model_from_file("models/barrett_hand/bh280.urdf", force_float=True)
+    _, data_free = load_mjx_model_and_data_from_file("models/barrett_hand/bh280.urdf", force_float=True)
     assert len(data_free.qpos) == 15  # additional 7 quat states
 
 
@@ -101,7 +99,7 @@ def test_convex_decomposition():
     """Tests the convex decomposition util."""
     meshfile = "models/barrett_hand/meshes/finger.obj"
     savedir = Path("_test_dir")
-    savedir.mkdir(parents=True, exist_ok=False)
+    savedir.mkdir(parents=True, exist_ok=True)
 
     # tests that meshes are generated and saved correctly
     decomposed_meshes = convex_decomposition_file(meshfile, quiet=True, savedir=savedir)
