@@ -231,6 +231,7 @@ def train():
     max_y, min_y = 13000, 0
 
     def progress(num_steps, metrics):
+        """Helper function for recording training progress."""
         print("Step:", num_steps, "Reward:", metrics["eval/episode_reward"], "Std:", metrics["eval/episode_reward_std"])
 
         times.append(datetime.now())
@@ -259,6 +260,16 @@ def train():
     model.save_params(model_path, params)
 
 
+def test():
+    """Load a trained policy and run a little sim with it."""
+    policy_path = "/tmp/mjx_brax_policy"
+    params = model.load_params(policy_path)
+
+    print(len(params))
+    print(type(params[0]))
+    print(type(params[1]))
+
+
 if __name__ == "__main__":
     # visualize_open_loop()
-    train()
+    test()
