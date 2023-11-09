@@ -122,7 +122,7 @@ class Pendulum(MjxEnv):
         mj_model = load_mj_model_from_file(path)
         mj_model.opt.solver = mujoco.mjtSolver.mjSOL_CG
 
-        physics_steps_per_control_step = 4
+        physics_steps_per_control_step = 1
         kwargs["physics_steps_per_control_step"] = kwargs.get(
             "physics_steps_per_control_step", physics_steps_per_control_step
         )
@@ -220,8 +220,19 @@ def train():
     print("Creating PPO agent...")
     train_fn = functools.partial(
         ppo.train,
-        num_timesteps=10,
-        episode_length=1000,
+        num_timesteps=100_000,
+        num_evals=50,
+        reward_scaling=0.1,
+        episode_length=200,
+        normalize_observations=True,
+        unroll_length=5,
+        num_minibatches=32,
+        num_updates_per_batch=8,
+        discounting=0.97,
+        learning_rate=1e-3,
+        entropy_cost=1e-3,
+        num_envs=128,
+        batch_size=64,
         seed=0,
     )
 
@@ -229,8 +240,6 @@ def train():
     y_data = []
     ydataerr = []
     times = [datetime.now()]
-
-    max_y, min_y = 13000, 0
 
     def progress(num_steps, metrics):
         """Helper function for recording training progress."""
@@ -242,7 +251,6 @@ def train():
         ydataerr.append(metrics["eval/episode_reward_std"])
 
         plt.xlim([0, train_fn.keywords["num_timesteps"] * 1.25])
-        plt.ylim([min_y, max_y])
 
         plt.xlabel("# environment steps")
         plt.ylabel("reward per episode")
@@ -253,9 +261,6 @@ def train():
     print("Training...")
     make_inference_fn, params, _ = train_fn(environment=env, progress_fn=progress)
 
-    print(make_inference_fn)
-    print(type(make_inference_fn))
-
     print(f"time to jit: {times[1] - times[0]}")
     print(f"time to train: {times[-1] - times[1]}")
 
@@ -264,22 +269,14 @@ def train():
     model_path = "/tmp/mjx_brax_policy"
     model.save_params(model_path, params)
 
+    # Show the learning curves
+    plt.show()
+
 
 def test():
     """Load a trained policy and run a little sim with it."""
-    # Load the saved policy weights
-    params = model.load_params("/tmp/mjx_brax_policy")
-
-    # Create the policy network
-    # TODO(vincekurtz): figure out how to save make_inference_fn when we train
-    network_factory = ppo_networks.make_ppo_networks
-    normalize = running_statistics.normalize
-    ppo_network = network_factory(2, 1, preprocess_observations_fn=normalize)  # TODO: get from env
-    make_inference_fn = ppo_networks.make_inference_fn(ppo_network)
-    policy = make_inference_fn(params)
-    jit_policy = jax.jit(policy)
-
     # Create an environment for evaluation
+    print("Creating test environment...")
     envs.register_environment("pendulum", Pendulum)
     env = envs.get_environment("pendulum")
     mj_model = env.model
@@ -288,10 +285,25 @@ def test():
     rng = jax.random.PRNGKey(0)
     ctrl = jp.zeros(mj_model.nu)
 
+    # Load the saved policy weights
+    print("Loading policy weights...")
+    params = model.load_params("/tmp/mjx_brax_policy")
+
+    # Create the policy network
+    print("Creating policy network...")
+    # TODO(vincekurtz): figure out how to save make_inference_fn when we train
+    network_factory = ppo_networks.make_ppo_networks
+    normalize = running_statistics.normalize
+    ppo_network = network_factory(env.observation_size, env.action_size, preprocess_observations_fn=normalize)
+    make_inference_fn = ppo_networks.make_inference_fn(ppo_network)
+    policy = make_inference_fn(params)
+    jit_policy = jax.jit(policy)
+
     # Set the initial state
     mj_data.qpos[0] = 1.2
 
     # Run a little sim
+    print("Running sim...")
     duration = 3.0  # seconds
     fps = 60
     frames = []
@@ -313,10 +325,11 @@ def test():
             frame = renderer.render()
             frames.append(frame)
 
+    print("Saving video...")
     media.write_video("pendulum_controlled.mp4", frames, fps=fps)
 
 
 if __name__ == "__main__":
     # visualize_open_loop()
-    # train()
+    train()
     test()
