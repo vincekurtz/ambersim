@@ -1,7 +1,8 @@
 import functools
 from datetime import datetime
-from typing import Tuple
+from typing import Sequence, Tuple
 
+import flax
 import jax
 import matplotlib.pyplot as plt
 import mediapy as media
@@ -11,9 +12,11 @@ from brax import envs
 from brax.base import Motion, Transform
 from brax.envs.base import Env, State
 from brax.io import model
+from brax.training import distribution, networks, types
 from brax.training.acme import running_statistics
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.ppo import train as ppo
+from flax import linen
 from jax import numpy as jp
 from mujoco import mjx
 from torch.utils.tensorboard import SummaryWriter
@@ -102,6 +105,11 @@ class CartPole(MjxEnv):
 
     def __init__(
         self,
+        upright_angle_cost: float = 1.0,
+        center_cart_cost: float = 0.0,
+        velocity_cost: float = 0.0,
+        control_cost: float = 0.0,
+        termination_threshold: float = 0.2,
         **kwargs,
     ):
         """Initializes the cart-pole environment."""
@@ -116,11 +124,20 @@ class CartPole(MjxEnv):
 
         super().__init__(mj_model=mj_model, **kwargs)
 
+        self._upright_angle_cost = upright_angle_cost
+        self._center_cart_cost = center_cart_cost
+        self._velocity_cost = velocity_cost
+        self._control_cost = control_cost
+
+        # Stop the episode if the pole falls over too far
+        self._termination_threshold = termination_threshold
+
     def reset(self, rng: jp.ndarray) -> State:
         """Resets the environment to a new initial state."""
         rng, rng1, rng2 = jax.random.split(rng, 3)
 
-        low, hi = -0.01, 0.01
+        low = -(self._termination_threshold - 0.05)
+        hi = self._termination_threshold - 0.05
         qpos = self.sys.qpos0 + jax.random.uniform(rng1, (self.sys.nq,), minval=low, maxval=hi)
         qvel = jax.random.uniform(rng2, (self.sys.nv,), minval=low, maxval=hi)
 
@@ -129,6 +146,10 @@ class CartPole(MjxEnv):
         reward, done, zero = jp.zeros(3)
         metrics = {
             "reward": zero,
+            "upright_reward": zero,
+            "center_cart_reward": zero,
+            "velocity_reward": zero,
+            "control_reward": zero,
         }
         return State(data, obs, reward, done, metrics)
 
@@ -138,12 +159,23 @@ class CartPole(MjxEnv):
         data = self.pipeline_step(data0, action)
         obs = self._get_obs(data, action)
 
-        theta = obs[1]
-        reward = -1 * theta * theta
-        done = jp.where(jp.abs(theta) > 0.5, 1.0, 0.0)
+        # Compute the reward
+        upright_reward = 1.0
+        # upright_reward = - self._upright_angle_cost * obs[1]**2
+        center_cart_reward = -self._center_cart_cost * obs[0] ** 2
+        velocity_reward = -self._velocity_cost * (obs[2] ** 2 + obs[3] ** 2)
+        control_reward = -self._control_cost * action[0] ** 2
+        reward = upright_reward + center_cart_reward + velocity_reward + control_reward
+
+        # Check if the episode is done
+        done = jp.where(jp.abs(obs[1]) > self._termination_threshold, 1.0, 0.0)
 
         state.metrics.update(
             reward=reward,
+            upright_reward=upright_reward,
+            center_cart_reward=center_cart_reward,
+            velocity_reward=velocity_reward,
+            control_reward=control_reward,
         )
 
         return state.replace(pipeline_state=data, obs=obs, reward=reward, done=done)
@@ -179,11 +211,162 @@ def visualize_open_loop(start_angle=0.0):
     media.write_video("cart_pole_open_loop.mp4", frames, fps=fps)
 
 
+@flax.struct.dataclass
+class CustomPPONetworks:
+    """Custom PPO networks."""
+
+    policy_network: networks.FeedForwardNetwork
+    value_network: networks.FeedForwardNetwork
+    parametric_action_distribution: distribution.ParametricDistribution
+
+
+class SequentialMLP(linen.Module):
+    """Your standard multi-layer perceptron."""
+
+    layer_sizes: Sequence[int]
+    activation: networks.ActivationFn = linen.relu
+    kernel_init: networks.Initializer = jax.nn.initializers.lecun_uniform()
+    activate_final: bool = False
+    bias: bool = True
+
+    @linen.compact
+    def __call__(self, data: jp.ndarray):
+        """Run the thing."""
+        hidden = data
+        for i, hidden_size in enumerate(self.layer_sizes):
+            hidden = linen.Dense(hidden_size, name=f"hidden_{i}", kernel_init=self.kernel_init, use_bias=self.bias)(
+                hidden
+            )
+            if i != len(self.layer_sizes) - 1 or self.activate_final:
+                hidden = self.activation(hidden)
+        return hidden
+
+
+class ParallelMLP(linen.Module):
+    """A multi-layer perceptron where all layers are flattened into one."""
+
+    layer_sizes: Sequence[int]
+    activation: networks.ActivationFn = linen.relu
+    kernel_init: networks.Initializer = jax.nn.initializers.lecun_uniform()
+    activate_final: bool = False
+    bias: bool = True
+
+    @linen.compact
+    def __call__(self, data: jp.ndarray):
+        """Run the thing."""
+        output_size = self.layer_sizes[-1]
+
+        # Evaluate each layer, mapping from the input to the output size
+        hidden_outputs = []
+        for i, hidden_size in enumerate(self.layer_sizes[:-1]):
+            hidden = linen.Dense(hidden_size, name=f"hidden_{i}", kernel_init=self.kernel_init, use_bias=self.bias)(
+                data
+            )
+            hidden = self.activation(hidden)
+            hidden = linen.Dense(output_size, name=f"output_{i}", kernel_init=self.kernel_init, use_bias=self.bias)(
+                hidden
+            )
+            hidden_outputs.append(hidden)
+
+        # Total output is the summ of all the hidden outputs
+        return sum(hidden_outputs)
+
+
+class HierarchicalMLP(linen.Module):
+    """MLP structure based on classical hierarchical control architectures."""
+
+    layer_sizes: Sequence[int]
+    activation: networks.ActivationFn = linen.relu
+    kernel_init: networks.Initializer = jax.nn.initializers.lecun_uniform()
+    activate_final: bool = False
+    bias: bool = True
+
+    @linen.compact
+    def __call__(self, x: jp.ndarray):
+        """Run the thing."""
+        output_size = self.layer_sizes[-1]
+
+        # First layer maps input to output, [x, y]
+        y = linen.Dense(self.layer_sizes[0], name="hidden_0", kernel_init=self.kernel_init, use_bias=self.bias)(x)
+        y = self.activation(y)
+        y = linen.Dense(output_size, name="output_0", kernel_init=self.kernel_init, use_bias=self.bias)(y)
+
+        # Subsequent layers map [x, y] --> y
+        for i, hidden_size in enumerate(self.layer_sizes[1:-1]):
+            y = jp.concatenate([x, y], axis=-1)
+            y = linen.Dense(hidden_size, name=f"hidden_{i + 1}", kernel_init=self.kernel_init, use_bias=self.bias)(y)
+            y = self.activation(y)
+            y = linen.Dense(output_size, name=f"output_{i + 1}", kernel_init=self.kernel_init, use_bias=self.bias)(y)
+        return y
+
+
+def make_custom_policy_network(
+    output_size: int,
+    obs_size: int,
+    preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
+    hidden_layer_sizes: Sequence[int] = (256, 256),
+    activation: networks.ActivationFn = linen.relu,
+) -> networks.FeedForwardNetwork:
+    """Creates a policy network."""
+    policy_module = HierarchicalMLP(
+        layer_sizes=list(hidden_layer_sizes) + [output_size],
+        activation=activation,
+        kernel_init=jax.nn.initializers.lecun_uniform(),
+    )
+
+    def apply(processor_params, policy_params, obs):
+        """Apply the policy network."""
+        obs = preprocess_observations_fn(obs, processor_params)
+        return policy_module.apply(policy_params, obs)
+
+    dummy_obs = jp.zeros((1, obs_size))
+    return networks.FeedForwardNetwork(init=lambda key: policy_module.init(key, dummy_obs), apply=apply)
+
+
+def make_custom_ppo_networks(
+    observation_size: int,
+    action_size: int,
+    preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
+    policy_hidden_layer_sizes: Sequence[int] = (32,) * 4,
+    value_hidden_layer_sizes: Sequence[int] = (256,) * 5,
+    activation: networks.ActivationFn = linen.swish,
+) -> CustomPPONetworks:
+    """Make some PPO networks (value network and policy network) with a custom architecture."""
+    parametric_action_distribution = distribution.NormalTanhDistribution(event_size=action_size)
+    policy_network = make_custom_policy_network(
+        parametric_action_distribution.param_size,
+        observation_size,
+        preprocess_observations_fn=preprocess_observations_fn,
+        hidden_layer_sizes=policy_hidden_layer_sizes,
+        activation=activation,
+    )
+    value_network = networks.make_value_network(
+        observation_size,
+        preprocess_observations_fn=preprocess_observations_fn,
+        hidden_layer_sizes=value_hidden_layer_sizes,
+        activation=activation,
+    )
+
+    return CustomPPONetworks(
+        policy_network=policy_network,
+        value_network=value_network,
+        parametric_action_distribution=parametric_action_distribution,
+    )
+
+
 def train():
     """Train a policy to swing up the cart-pole, then save the trained policy."""
     print("Creating cart-pole environment...")
     envs.register_environment("cart_pole", CartPole)
     env = envs.get_environment("cart_pole")
+
+    # Use a custom network architecture
+    print("Creating policy network...")
+    network_factory = functools.partial(
+        make_custom_ppo_networks,
+        policy_hidden_layer_sizes=(128,) * 20,
+        value_hidden_layer_sizes=(256,) * 5,
+    )
 
     # Create the PPO agent
     print("Creating PPO agent...")
@@ -201,8 +384,9 @@ def train():
         discounting=0.97,
         learning_rate=3e-4,
         entropy_cost=1e-2,
-        num_envs=2048,
-        batch_size=1024,
+        num_envs=256,
+        batch_size=128,
+        network_factory=network_factory,
         seed=1,
     )
 
@@ -302,4 +486,4 @@ def test(start_angle=0.0):
 if __name__ == "__main__":
     # visualize_open_loop(0.0)
     train()
-    test(0.2)
+    # test(0.2)
