@@ -21,6 +21,7 @@ from jax import numpy as jp
 from mujoco import mjx
 from torch.utils.tensorboard import SummaryWriter
 
+from ambersim.reinforcement_learning.policies import MLP
 from ambersim.utils.io_utils import load_mj_model_from_file
 
 """
@@ -311,7 +312,7 @@ def make_custom_policy_network(
     activation: networks.ActivationFn = linen.relu,
 ) -> networks.FeedForwardNetwork:
     """Creates a policy network."""
-    policy_module = HierarchicalMLP(
+    policy_module = MLP(
         layer_sizes=list(hidden_layer_sizes) + [output_size],
         activation=activation,
         kernel_init=jax.nn.initializers.lecun_uniform(),
@@ -367,7 +368,7 @@ def train():
     print("Creating policy network...")
     network_factory = functools.partial(
         make_custom_ppo_networks,
-        policy_hidden_layer_sizes=(512,) * 32,
+        policy_hidden_layer_sizes=(512,) * 1,
         value_hidden_layer_sizes=(256,) * 3,
     )
 
@@ -390,7 +391,7 @@ def train():
         num_envs=256,
         batch_size=128,
         network_factory=network_factory,
-        seed=0,
+        seed=3,
     )
 
     # Set up tensorboard logging
