@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jp
 
-from ambersim.reinforcement_learning.policies import MLP
+from ambersim.reinforcement_learning.policies import MLP, SequentialComposition
 
 
 def test_mlp():
@@ -31,3 +31,30 @@ def test_mlp():
         expected_num_params += sizes[i] * sizes[i + 1]  # weights
         expected_num_params += sizes[i + 1]  # biases
     assert num_params == expected_num_params
+
+
+def test_sequential():
+    """Test creating and evaluating a sequential composition of modules."""
+    # Each module is an MLP with these dimensions
+    input_size = (2,)
+    hidden_sizes = (128,) * 2
+    output_size = (3,)
+
+    # Create the sequential composition
+    num_modules = 3
+    rng = jax.random.PRNGKey(0)
+    net = SequentialComposition(MLP, num_modules, layer_sizes=hidden_sizes + output_size)
+    dummy_input = jp.ones(input_size)
+    params = net.init(rng, dummy_input)
+
+    # Check the MLP's structure
+    print(net.tabulate(rng, dummy_input, depth=1))
+
+    # Forward pass through the network
+    my_input = jax.random.normal(rng, input_size)
+    my_output = net.apply(params, my_input)
+    assert my_output.shape[-1] == output_size[-1]
+
+
+if __name__ == "__main__":
+    test_sequential()
