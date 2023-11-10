@@ -232,13 +232,16 @@ class SequentialMLP(linen.Module):
     @linen.compact
     def __call__(self, data: jp.ndarray):
         """Run the thing."""
+        output_size = self.layer_sizes[-1]
         hidden = data
-        for i, hidden_size in enumerate(self.layer_sizes):
+        for i, hidden_size in enumerate(self.layer_sizes[:-1]):
             hidden = linen.Dense(hidden_size, name=f"hidden_{i}", kernel_init=self.kernel_init, use_bias=self.bias)(
                 hidden
             )
-            if i != len(self.layer_sizes) - 1 or self.activate_final:
-                hidden = self.activation(hidden)
+            hidden = self.activation(hidden)
+            hidden = linen.Dense(output_size, name=f"output_{i}", kernel_init=self.kernel_init, use_bias=self.bias)(
+                hidden
+            )
         return hidden
 
 
@@ -364,8 +367,8 @@ def train():
     print("Creating policy network...")
     network_factory = functools.partial(
         make_custom_ppo_networks,
-        policy_hidden_layer_sizes=(128,) * 20,
-        value_hidden_layer_sizes=(256,) * 5,
+        policy_hidden_layer_sizes=(512,) * 32,
+        value_hidden_layer_sizes=(256,) * 3,
     )
 
     # Create the PPO agent
@@ -387,7 +390,7 @@ def train():
         num_envs=256,
         batch_size=128,
         network_factory=network_factory,
-        seed=1,
+        seed=0,
     )
 
     # Set up tensorboard logging
