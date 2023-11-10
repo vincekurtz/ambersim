@@ -1,7 +1,12 @@
 import jax
 import jax.numpy as jp
 
-from ambersim.reinforcement_learning.policies import MLP, ParallelComposition, SequentialComposition
+from ambersim.reinforcement_learning.policies import (
+    MLP,
+    HierarchyComposition,
+    ParallelComposition,
+    SequentialComposition,
+)
 
 
 def test_mlp():
@@ -67,6 +72,29 @@ def test_parallel():
     num_modules = 3
     rng = jax.random.PRNGKey(0)
     net = ParallelComposition(MLP, num_modules, module_kwargs={"layer_sizes": hidden_sizes + output_size})
+    dummy_input = jp.ones(input_size)
+    params = net.init(rng, dummy_input)
+
+    # Check the MLP's structure
+    print(net.tabulate(rng, dummy_input, depth=1))
+
+    # Forward pass through the network
+    my_input = jax.random.normal(rng, input_size)
+    my_output = net.apply(params, my_input)
+    assert my_output.shape[-1] == output_size[-1]
+
+
+def test_hierarchy():
+    """Test creating and evaluating a hierarchical composition of modules."""
+    # Each module is an MLP with these dimensions
+    input_size = (2,)
+    hidden_sizes = (128,) * 2
+    output_size = (3,)
+
+    # Create the parallel composition
+    num_modules = 3
+    rng = jax.random.PRNGKey(0)
+    net = HierarchyComposition(MLP, num_modules, module_kwargs={"layer_sizes": hidden_sizes + output_size})
     dummy_input = jp.ones(input_size)
     params = net.init(rng, dummy_input)
 
