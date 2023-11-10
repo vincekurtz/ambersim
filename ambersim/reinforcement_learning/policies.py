@@ -73,3 +73,44 @@ class SequentialComposition(nn.Module):
         for _ in range(self.num_modules):
             x = self.module_type(**self.module_kwargs)(x)
         return x
+
+
+class ParallelComposition(nn.Module):
+    """A series of modules applied in parallel and then summed, i.e.
+
+                     -------
+             ------> | m_1 | ------
+             |       -------      |
+             |                    |
+             |       -------      |
+        x -->|-----> | m_2 | ----(+)---> y
+             |       -------      |
+             |                    |
+             |       -------      |
+             ------> | m_3 | ------
+                     -------
+
+    Args:
+        module_type: Type of module to create
+        num_modules: Number modules in the chain
+        module_kwargs: Keyword arguments to pass to each module.
+    """
+
+    module_type: nn.Module
+    num_modules: int
+    module_kwargs: dict
+
+    @nn.compact
+    def __call__(self, x: jp.ndarray):
+        """Forward pass through the network.
+
+        Args:
+            x: Input to the network.
+        """
+        # TODO(vincekurtz): use jax control flow
+        outputs = []
+        for _ in range(self.num_modules):
+            y = self.module_type(**self.module_kwargs)(x)
+            outputs.append(y)
+        y = jp.sum(jp.stack(outputs), axis=0)
+        return y
