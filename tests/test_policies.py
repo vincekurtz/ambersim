@@ -1,12 +1,7 @@
 import jax
 import jax.numpy as jp
 
-from ambersim.reinforcement_learning.policies import (
-    MLP,
-    HierarchyComposition,
-    ParallelComposition,
-    SequentialComposition,
-)
+from ambersim.rl.policies import MLP, HierarchyComposition, ParallelComposition, SequentialComposition
 
 
 def test_mlp():

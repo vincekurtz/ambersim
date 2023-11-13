@@ -354,4 +354,4 @@ def test(start_angle=0.0):
 if __name__ == "__main__":
     # visualize_open_loop(np.pi-0.01)
     train()
-    test()
+    # test()
