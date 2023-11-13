@@ -159,10 +159,8 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# mujoco
-MUJOCO_LOG.TXT
-
 # vim
 *.swp
 
-*.mp4
+# mujoco
+MUJOCO_LOG.TXT
