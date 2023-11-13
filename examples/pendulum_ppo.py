@@ -1,23 +1,20 @@
 import functools
+import time
 from datetime import datetime
-from typing import Tuple
 
 import jax
 import matplotlib.pyplot as plt
-import mediapy as media
 import mujoco
-import numpy as np
+import mujoco.viewer
 from brax import envs
-from brax.base import Motion, Transform
-from brax.envs.base import Env, State
 from brax.io import model
 from brax.training.acme import running_statistics
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.ppo import train as ppo
-from etils import epath
 from jax import numpy as jp
 from mujoco import mjx
 
+from ambersim.rl.base import MjxEnv, State
 from ambersim.utils.io_utils import load_mj_model_from_file
 
 """
@@ -28,77 +25,6 @@ https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/mjx/tu
 """
 
 
-class MjxEnv(Env):
-    """API for driving an MJX system for training and inference in brax."""
-
-    def __init__(
-        self,
-        mj_model: mujoco.MjModel,
-        physics_steps_per_control_step: int = 1,
-    ):
-        """Initializes MjxEnv.
-
-        Args:
-          mj_model: mujoco.MjModel
-          physics_steps_per_control_step: the number of times to step the physics
-            pipeline for each environment step
-        """
-        self.model = mj_model
-        self.data = mujoco.MjData(mj_model)
-        self.sys = mjx.device_put(mj_model)
-        self._physics_steps_per_control_step = physics_steps_per_control_step
-
-    def pipeline_init(self, qpos: jax.Array, qvel: jax.Array) -> mjx.Data:
-        """Initializes the physics state."""
-        data = mjx.device_put(self.data)
-        data = data.replace(qpos=qpos, qvel=qvel, ctrl=jp.zeros(self.sys.nu))
-        data = mjx.forward(self.sys, data)
-        return data
-
-    def pipeline_step(self, data: mjx.Data, ctrl: jax.Array) -> mjx.Data:
-        """Takes a physics step using the physics pipeline."""
-
-        def f(data, _):
-            data = data.replace(ctrl=ctrl)
-            return (
-                mjx.step(self.sys, data),
-                None,
-            )
-
-        data, _ = jax.lax.scan(f, data, (), self._physics_steps_per_control_step)
-        return data
-
-    @property
-    def dt(self) -> jax.Array:
-        """The timestep used for each env step."""
-        return self.sys.opt.timestep * self._physics_steps_per_control_step
-
-    @property
-    def observation_size(self) -> int:
-        """Returns the size of the observation vector."""
-        rng = jax.random.PRNGKey(0)
-        reset_state = self.unwrapped.reset(rng)
-        return reset_state.obs.shape[-1]
-
-    @property
-    def action_size(self) -> int:
-        """Returns the size of the action vector."""
-        return self.sys.nu
-
-    @property
-    def backend(self) -> str:
-        """Returns the backend used by this environment."""
-        return "mjx"
-
-    def _pos_vel(self, data: mjx.Data) -> Tuple[Transform, Motion]:
-        """Returns 6d spatial transform and 6d velocity for all bodies."""
-        x = Transform(pos=data.xpos[1:, :], rot=data.xquat[1:, :])
-        cvel = Motion(vel=data.cvel[1:, 3:], ang=data.cvel[1:, :3])
-        offset = data.xpos[1:, :] - data.subtree_com[self.model.body_rootid[np.arange(1, self.model.nbody)]]
-        xd = Transform.create(pos=offset).vmap().do(cvel)
-        return x, xd
-
-
 class Pendulum(MjxEnv):
     """Training environment for a simple pendulum."""
 
@@ -107,7 +33,7 @@ class Pendulum(MjxEnv):
         control_cost_weight=0.001,
         theta_cost_weight=1.0,
         theta_dot_cost_weight=0.1,
-        reset_noise_scale=2.0,
+        reset_noise_scale=4.0,
         **kwargs,
     ):
         """Initializes the pendulum environment.
@@ -118,7 +44,7 @@ class Pendulum(MjxEnv):
           theta_dot_cost_weight: cost coefficient for velocities
           reset_noise_scale: scale of gaussian noise added to qpos on reset
         """
-        path = "models/pendulum/pendulum.xml"
+        path = "models/pendulum/scene.xml"
         mj_model = load_mj_model_from_file(path)
         mj_model.opt.solver = mujoco.mjtSolver.mjSOL_CG
 
@@ -191,32 +117,6 @@ class Pendulum(MjxEnv):
         return jp.array([jp.cos(theta), jp.sin(theta), theta_dot])
 
 
-def visualize_open_loop(start_angle=0.0):
-    """Save a video of an open-loop trajectory, using just mujoco."""
-    mj_model = load_mj_model_from_file("models/pendulum/pendulum.xml")
-    mj_data = mujoco.MjData(mj_model)
-    renderer = mujoco.Renderer(mj_model)
-
-    # Set the initial state
-    mj_data.qpos[0] = start_angle
-
-    # Simulate a trajectory
-    num_steps = 1000
-    fps = 60
-    render_every = int(1.0 / (mj_model.opt.timestep * fps))
-    frames = []
-
-    for k in range(num_steps):
-        mujoco.mj_step(mj_model, mj_data)
-        renderer.update_scene(mj_data)
-
-        if k % render_every == 0:
-            frame = renderer.render()
-            frames.append(frame)
-
-    media.write_video("pendulum_open_loop.mp4", frames, fps=fps)
-
-
 def train():
     """Train a policy to swing up the pendulum, then save the trained policy."""
     print("Creating pendulum environment...")
@@ -230,7 +130,7 @@ def train():
         num_timesteps=100_000,
         num_evals=50,
         reward_scaling=0.1,
-        episode_length=1000,
+        episode_length=200,
         normalize_observations=True,
         action_repeat=1,
         unroll_length=10,
@@ -239,8 +139,8 @@ def train():
         discounting=0.97,
         learning_rate=3e-4,
         entropy_cost=0,
-        num_envs=128,
-        batch_size=64,
+        num_envs=1024,
+        batch_size=512,
         seed=0,
     )
 
@@ -298,7 +198,6 @@ def test(start_angle=0.0):
     env = envs.get_environment("pendulum")
     mj_model = env.model
     mj_data = mujoco.MjData(mj_model)
-    renderer = mujoco.Renderer(mj_model)
     rng = jax.random.PRNGKey(0)
     ctrl = jp.zeros(mj_model.nu)
 
@@ -320,38 +219,30 @@ def test(start_angle=0.0):
     mj_data.qpos[0] = start_angle
     mj_data.qvel[0] = 0.0
 
-    # Run a little sim
-    print("Running sim...")
-    num_steps = 1000
-    fps = 60
-    render_every = int(1.0 / (env.dt * fps))
-    frames = []
+    with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
+        while viewer.is_running():
+            step_start = time.time()
 
-    for k in range(num_steps):
-        act_rng, rng = jax.random.split(rng)
+            act_rng, rng = jax.random.split(rng)
 
-        # Get the last observation
-        obs = env._get_obs(mjx.device_put(mj_data), ctrl)
+            # Get the last observation
+            obs = env._get_obs(mjx.device_put(mj_data), ctrl)
 
-        # Compute the control action for the next step
-        ctrl, _ = jit_policy(obs, act_rng)
-        mj_data.ctrl = ctrl
+            # Compute the control action for the next step
+            ctrl, _ = jit_policy(obs, act_rng)
+            mj_data.ctrl = ctrl
 
-        # Step the simulation
-        for _ in range(env._physics_steps_per_control_step):
-            mujoco.mj_step(mj_model, mj_data)
+            # Step the simulation
+            for _ in range(env._physics_steps_per_control_step):
+                mujoco.mj_step(mj_model, mj_data)
+                viewer.sync()
 
-        if k % render_every == 0:
-            # Add an image of the scene to the video
-            renderer.update_scene(mj_data)
-            frame = renderer.render()
-            frames.append(frame)
-
-    print("Saving video...")
-    media.write_video("pendulum_controlled.mp4", frames, fps=fps)
+            # Try to run in roughly real time
+            elapsed = time.time() - step_start
+            if elapsed < mj_model.opt.timestep:
+                time.sleep(mj_model.opt.timestep - elapsed)
 
 
 if __name__ == "__main__":
-    # visualize_open_loop(np.pi-0.01)
     train()
-    # test()
+    test()
