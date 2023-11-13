@@ -107,9 +107,9 @@ class CartPole(MjxEnv):
     def __init__(
         self,
         upright_angle_cost: float = 1.0,
-        center_cart_cost: float = 0.0,
-        velocity_cost: float = 0.0,
-        control_cost: float = 0.0,
+        center_cart_cost: float = 0.01,
+        velocity_cost: float = 0.01,
+        control_cost: float = 0.001,
         termination_threshold: float = 0.2,
         **kwargs,
     ):
@@ -161,8 +161,7 @@ class CartPole(MjxEnv):
         obs = self._get_obs(data, action)
 
         # Compute the reward
-        upright_reward = 1.0
-        # upright_reward = - self._upright_angle_cost * obs[1]**2
+        upright_reward = 1.0 - self._upright_angle_cost * obs[1] ** 2
         center_cart_reward = -self._center_cart_cost * obs[0] ** 2
         velocity_reward = -self._velocity_cost * (obs[2] ** 2 + obs[3] ** 2)
         control_reward = -self._control_cost * action[0] ** 2
@@ -312,7 +311,7 @@ def make_custom_policy_network(
     activation: networks.ActivationFn = linen.relu,
 ) -> networks.FeedForwardNetwork:
     """Creates a policy network."""
-    policy_module = MLP(
+    policy_module = ParallelMLP(
         layer_sizes=list(hidden_layer_sizes) + [output_size],
         activation=activation,
         kernel_init=jax.nn.initializers.lecun_uniform(),
@@ -368,7 +367,7 @@ def train():
     print("Creating policy network...")
     network_factory = functools.partial(
         make_custom_ppo_networks,
-        policy_hidden_layer_sizes=(512,) * 1,
+        policy_hidden_layer_sizes=(512,) * 9,
         value_hidden_layer_sizes=(256,) * 3,
     )
 
@@ -390,13 +389,14 @@ def train():
         entropy_cost=1e-2,
         num_envs=256,
         batch_size=128,
+        clipping_epsilon=0.2,
         network_factory=network_factory,
-        seed=3,
+        seed=0,
     )
 
     # Set up tensorboard logging
     print("Setting up tensorboard...")
-    writer = SummaryWriter("/tmp/mjx_brax_logs/cart_pole")
+    writer = SummaryWriter("/tmp/mjx_brax_logs/cart_pole_parallel_9")
 
     times = [datetime.now()]
 
@@ -490,4 +490,4 @@ def test(start_angle=0.0):
 if __name__ == "__main__":
     # visualize_open_loop(0.0)
     train()
-    # test(0.2)
+    # test(0.1)
