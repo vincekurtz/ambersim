@@ -1,10 +1,80 @@
+from dataclasses import dataclass
 from typing import Sequence
 
 import flax.linen as nn
 import jax.numpy as jp
 from brax.training import distribution, networks, types
+from brax.training.agents.ppo.networks import PPONetworks
 
 """Tools for defining neural network policies with various architectures."""
+
+
+@dataclass
+class PPONetworkConfig:
+    """Pickleable configuration for a simple PPO network.
+
+    Args:
+        policy_layer_sizes: Sizes of hidden layers in the policy, excluding the
+            output layer.
+        value_layer_sizes: Sizes of hidden layers in the value function, excluding
+            the output layer.
+    """
+
+    policy_hidden_layer_sizes: Sequence[int] = (64, 64)
+    value_hidden_layer_sizes: Sequence[int] = (64, 64)
+
+
+def make_ppo_networks_from_config(
+    observation_size: int,
+    action_size: int,
+    config: PPONetworkConfig,
+    preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
+) -> PPONetworks:
+    """Creates policy and value networks for brax from a saveable config.
+
+    Args:
+        observation_size: Size of the input (observation).
+        action_size: Size of the policy output (action).
+        config: Configuration for the network.
+
+    Returns:
+        A tuple of (policy, value) networks.
+    """
+    # Create an action distribution given the action size
+    parametric_action_distribution = distribution.NormalTanhDistribution(event_size=action_size)
+
+    # Create the policy network, a FeedForwardNetwork that contains an "init"
+    # and an "apply" function.
+    policy_output_size = parametric_action_distribution.param_size
+    policy_layer_sizes = config.policy_hidden_layer_sizes + (policy_output_size,)
+    policy_mlp = MLP(layer_sizes=policy_layer_sizes)
+
+    dummy_obs = jp.zeros((1, observation_size))
+
+    def policy_init(key):
+        """Initialize the policy network from a random key."""
+        return policy_mlp.init(key, dummy_obs)
+
+    def policy_apply(processor_params, policy_params, obs):
+        """Apply the policy given the parameters and an observation."""
+        obs = preprocess_observations_fn(obs, processor_params)
+        return policy_mlp.apply(policy_params, obs)
+
+    policy_network = networks.FeedForwardNetwork(init=policy_init, apply=policy_apply)
+
+    # Create the value network. This is just like the policy network, but with
+    # a 1D output.
+    value_network = networks.make_value_network(
+        observation_size,
+        preprocess_observations_fn=preprocess_observations_fn,
+        hidden_layer_sizes=config.value_hidden_layer_sizes,
+    )
+
+    return PPONetworks(
+        policy_network=policy_network,
+        value_network=value_network,
+        parametric_action_distribution=parametric_action_distribution,
+    )
 
 
 class MLP(nn.Module):
