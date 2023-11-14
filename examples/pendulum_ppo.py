@@ -2,10 +2,18 @@ import functools
 import time
 from datetime import datetime
 
-import jax
-import matplotlib.pyplot as plt
+# mujoco viewer must be imported before jax on 22.04
+# isort: off
 import mujoco
 import mujoco.viewer
+
+# isort: on
+
+
+import pickle
+
+import jax
+import matplotlib.pyplot as plt
 from brax import envs
 from brax.io import model
 from brax.training.acme import running_statistics
@@ -13,8 +21,10 @@ from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.ppo import train as ppo
 from jax import numpy as jp
 from mujoco import mjx
+from torch.utils.tensorboard import SummaryWriter
 
 from ambersim.rl.base import MjxEnv, State
+from ambersim.rl.policies import PPONetworkConfig, make_ppo_networks_from_config
 from ambersim.utils.io_utils import load_mj_model_from_file
 
 """
@@ -91,7 +101,13 @@ class Pendulum(MjxEnv):
         theta = data.qpos[0]
         theta_dot = data.qvel[0]
 
-        reward_theta = -self._theta_cost_weight * jp.square(theta - self._theta_nom).sum()
+        # TODO: normalize reward_theta
+        theta_err = theta - self._theta_nom
+        s = jp.sin(theta_err)
+        c = jp.cos(theta_err)
+        theta_err_normalized = jp.arctan2(s, c)
+
+        reward_theta = -self._theta_cost_weight * jp.square(theta_err_normalized).sum()
         reward_theta_dot = -self._theta_dot_cost_weight * jp.square(theta_dot).sum()
         reward_ctrl = -self._control_cost_weight * jp.square(action).sum()
         reward = reward_theta + reward_theta_dot + reward_ctrl
@@ -125,6 +141,13 @@ def train():
 
     # Create the PPO agent
     print("Creating PPO agent...")
+
+    config = PPONetworkConfig(
+        policy_hidden_layer_sizes=(64, 64),
+        value_hidden_layer_sizes=(64, 64),
+    )
+    network_factory = functools.partial(make_ppo_networks_from_config, config=config)
+
     train_fn = functools.partial(
         ppo.train,
         num_timesteps=100_000,
@@ -141,37 +164,32 @@ def train():
         entropy_cost=0,
         num_envs=1024,
         batch_size=512,
+        clipping_epsilon=0.2,
+        network_factory=network_factory,
         seed=0,
     )
 
-    x_data = []
-    y_data = []
-    ydataerr = []
+    # Set up tensorboard logging
+    log_dir = "/tmp/mjx_brax_logs/pendulum"
+    print(f"Setting up tensorboard logging in {log_dir} ...")
+    writer = SummaryWriter(log_dir)
+
     times = [datetime.now()]
 
     def progress(num_steps, metrics):
         """Helper function for recording training progress."""
-        print(
-            "    Step:",
-            num_steps,
-            "Reward:",
-            metrics["eval/episode_reward"],
-            "Std:",
-            metrics["eval/episode_reward_std"],
-        )
+        reward = metrics["eval/episode_reward"]
+        std = metrics["eval/episode_reward_std"]
+        print(f"    Step: {num_steps},  Reward: {reward:.3f},  Std: {std:.3f}")
 
+        # Record the current wall clock time
         times.append(datetime.now())
-        x_data.append(num_steps)
-        y_data.append(metrics["eval/episode_reward"])
-        ydataerr.append(metrics["eval/episode_reward_std"])
 
-        plt.xlim([0, train_fn.keywords["num_timesteps"] * 1.25])
-
-        plt.xlabel("# environment steps")
-        plt.ylabel("reward per episode")
-        plt.title(f"y={y_data[-1]:.3f}")
-
-        plt.errorbar(x_data, y_data, yerr=ydataerr)
+        # Write all the metrics to tensorboard
+        for key, val in metrics.items():
+            if isinstance(val, jax.Array):
+                val = float(val)
+            writer.add_scalar(key, val, num_steps)
 
     print("Training...")
     make_inference_fn, params, metrics = train_fn(environment=env, progress_fn=progress)
@@ -179,15 +197,13 @@ def train():
     print(f"  time to jit: {times[1] - times[0]}")
     print(f"  time to train: {times[-1] - times[1]}")
 
-    print("  Metrics: ", metrics)
-
     # Save the trained policy
     print("Saving trained policy...")
-    model_path = "/tmp/mjx_brax_policy"
-    model.save_params(model_path, params)
-
-    # Show the learning curves
-    plt.show()
+    params_path = "/tmp/pendulum_params"
+    config_path = "/tmp/pendulum_config"
+    model.save_params(params_path, params)
+    with open(config_path, "wb") as f:
+        pickle.dump(config, f)
 
 
 def test(start_angle=0.0):
@@ -201,16 +217,19 @@ def test(start_angle=0.0):
     rng = jax.random.PRNGKey(0)
     ctrl = jp.zeros(mj_model.nu)
 
-    # Load the saved policy weights
-    print("Loading policy weights...")
-    params = model.load_params("/tmp/mjx_brax_policy")
+    # Load the saved policy
+    print("Loading policy...")
+    params_path = "/tmp/pendulum_params"
+    config_path = "/tmp/pendulum_config"
+    params = model.load_params(params_path)
+    with open(config_path, "rb") as f:
+        config = pickle.load(f)
 
     # Create the policy network
     print("Creating policy network...")
-    # TODO(vincekurtz): figure out how to save make_inference_fn when we train
-    network_factory = ppo_networks.make_ppo_networks
-    normalize = running_statistics.normalize
-    ppo_network = network_factory(env.observation_size, env.action_size, preprocess_observations_fn=normalize)
+    ppo_network = make_ppo_networks_from_config(
+        env.observation_size, env.action_size, config, preprocess_observations_fn=running_statistics.normalize
+    )
     make_inference_fn = ppo_networks.make_inference_fn(ppo_network)
     policy = make_inference_fn(params)
     jit_policy = jax.jit(policy)
@@ -245,4 +264,4 @@ def test(start_angle=0.0):
 
 if __name__ == "__main__":
     train()
-    test()
+    test(3.14)

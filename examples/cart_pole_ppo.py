@@ -286,7 +286,7 @@ def train():
         num_timesteps=1_000_000,
         num_evals=10,
         reward_scaling=1,
-        episode_length=1000,
+        episode_length=200,
         normalize_observations=True,
         action_repeat=1,
         unroll_length=5,

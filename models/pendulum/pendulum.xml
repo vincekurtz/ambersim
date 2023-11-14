@@ -1,4 +1,5 @@
 <mujoco model="pendulum">
+  <option timestep="0.02"/>
   <worldbody>
     <body name="base" pos="0 0 1.5">
       <inertial pos="0 0 0" mass="2" diaginertia="0.00072 0.00072 0.00072"/>
