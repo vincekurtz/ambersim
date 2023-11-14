@@ -10,6 +10,8 @@ import mujoco.viewer
 
 # isort: on
 
+import pickle
+
 import flax
 import jax
 from brax import envs
@@ -273,7 +275,7 @@ def train():
     print("Creating policy network...")
     config = PPONetworkConfig(
         policy_hidden_layer_sizes=(512,) * 1,
-        value_hidden_layer_sizes=(256,) * 1,
+        value_hidden_layer_sizes=(256,) * 3,
     )
     network_factory = functools.partial(make_ppo_networks_from_config, config=config)
 
@@ -281,7 +283,7 @@ def train():
     print("Creating PPO agent...")
     train_fn = functools.partial(
         ppo.train,
-        num_timesteps=100_000,
+        num_timesteps=1_000_000,
         num_evals=10,
         reward_scaling=1,
         episode_length=1000,
@@ -293,8 +295,8 @@ def train():
         discounting=0.97,
         learning_rate=3e-4,
         entropy_cost=1e-2,
-        num_envs=256,
-        batch_size=128,
+        num_envs=1024,
+        batch_size=512,
         clipping_epsilon=0.2,
         network_factory=network_factory,
         seed=0,
@@ -330,8 +332,11 @@ def train():
 
     # Save the trained policy
     print("Saving trained policy...")
-    model_path = "/tmp/mjx_brax_policy"
-    model.save_params(model_path, params)
+    params_path = "/tmp/cart_pole_params"
+    config_path = "/tmp/cart_pole_config"
+    model.save_params(params_path, params)
+    with open(config_path, "wb") as f:
+        pickle.dump(config, f)
 
 
 def test(start_angle=0.0):
@@ -345,16 +350,19 @@ def test(start_angle=0.0):
     rng = jax.random.PRNGKey(0)
     ctrl = jp.zeros(mj_model.nu)
 
-    # Load the saved policy weights
-    print("Loading policy weights...")
-    params = model.load_params("/tmp/mjx_brax_policy")
+    # Load the saved policy
+    print("Loading policy ...")
+    params_path = "/tmp/cart_pole_params"
+    config_path = "/tmp/cart_pole_config"
+    params = model.load_params(params_path)
+    with open(config_path, "rb") as f:
+        config = pickle.load(f)
 
     # Create the policy network
     print("Creating policy network...")
-    # TODO(vincekurtz): figure out how to save make_inference_fn when we train
-    network_factory = ppo_networks.make_ppo_networks
-    normalize = running_statistics.normalize
-    ppo_network = network_factory(env.observation_size, env.action_size, preprocess_observations_fn=normalize)
+    ppo_network = make_ppo_networks_from_config(
+        env.observation_size, env.action_size, config, preprocess_observations_fn=running_statistics.normalize
+    )
     make_inference_fn = ppo_networks.make_inference_fn(ppo_network)
     policy = make_inference_fn(params)
     jit_policy = jax.jit(policy)
@@ -388,4 +396,4 @@ def test(start_angle=0.0):
 
 if __name__ == "__main__":
     train()
-    # test(0.1)
+    test(0.1)
