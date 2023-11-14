@@ -3,10 +3,15 @@ import time
 from datetime import datetime
 from typing import Sequence
 
-import flax
-import jax
+# mujoco viewer must be imported before jax on 22.04
+# isort: off
 import mujoco
 import mujoco.viewer
+
+# isort: on
+
+import flax
+import jax
 from brax import envs
 from brax.io import model
 from brax.training import distribution, networks, types
