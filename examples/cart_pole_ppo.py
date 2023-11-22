@@ -338,7 +338,7 @@ def train():
     networks_path = "/tmp/cart_pole_networks.pkl"
     model.save_params(params_path, params)
     with open(networks_path, "wb") as f:
-        pickle.dump(policy_network, f)
+        pickle.dump(ppo_networks, f)
 
 
 def test(start_angle=0.0):
@@ -355,16 +355,19 @@ def test(start_angle=0.0):
     # Load the saved policy
     print("Loading policy ...")
     params_path = "/tmp/cart_pole_params"
-    config_path = "/tmp/cart_pole_config"
+    networks_path = "/tmp/cart_pole_networks.pkl"
     params = model.load_params(params_path)
-    with open(config_path, "rb") as f:
-        config = pickle.load(f)
+    with open(networks_path, "rb") as f:
+        network_wrapper = pickle.load(f)
 
     # Create the policy network
     print("Creating policy network...")
-    ppo_network = make_ppo_networks_from_config(
-        env.observation_size, env.action_size, config, preprocess_observations_fn=running_statistics.normalize
+    ppo_network = network_wrapper.network_factory(
+        env.observation_size, env.action_size, preprocess_observations_fn=running_statistics.normalize
     )
+    print(ppo_network)
+    print(type(ppo_network))
+
     make_inference_fn = ppo_networks.make_inference_fn(ppo_network)
     policy = make_inference_fn(params)
     jit_policy = jax.jit(policy)
@@ -398,4 +401,4 @@ def test(start_angle=0.0):
 
 if __name__ == "__main__":
     train()
-    # test(0.1)
+    test(0.1)
