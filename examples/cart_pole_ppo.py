@@ -26,7 +26,7 @@ from mujoco import mjx
 from torch.utils.tensorboard import SummaryWriter
 
 from ambersim.rl.base import MjxEnv, State
-from ambersim.rl.policies import MLP, PPONetworkConfig, make_ppo_networks_from_config
+from ambersim.rl.policies import MLP, BraxPPONetworkWrapper, PPONetworkConfig, make_ppo_networks_from_config
 from ambersim.utils.io_utils import load_mj_model_from_file
 
 """
@@ -273,11 +273,13 @@ def train():
 
     # Use a custom network architecture
     print("Creating policy network...")
-    config = PPONetworkConfig(
-        policy_hidden_layer_sizes=(512,) * 1,
-        value_hidden_layer_sizes=(256,) * 3,
+    policy_network = MLP(layer_sizes=[512, 2])
+    value_network = MLP(layer_sizes=[256, 256, 1])
+    ppo_wrapper = BraxPPONetworkWrapper(
+        policy_network=policy_network,
+        value_network=value_network,
+        action_distribution=distribution.NormalTanhDistribution,
     )
-    network_factory = functools.partial(make_ppo_networks_from_config, config=config)
 
     # Create the PPO agent
     print("Creating PPO agent...")
@@ -298,7 +300,7 @@ def train():
         num_envs=1024,
         batch_size=512,
         clipping_epsilon=0.2,
-        network_factory=network_factory,
+        network_factory=ppo_wrapper.network_factory,
         seed=0,
     )
 
@@ -335,6 +337,7 @@ def train():
     params_path = "/tmp/cart_pole_params"
     config_path = "/tmp/cart_pole_config"
     model.save_params(params_path, params)
+    config = None  # WIP
     with open(config_path, "wb") as f:
         pickle.dump(config, f)
 
@@ -396,4 +399,4 @@ def test(start_angle=0.0):
 
 if __name__ == "__main__":
     train()
-    test(0.1)
+    # test(0.1)
