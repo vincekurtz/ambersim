@@ -81,5 +81,5 @@ def save_ppo_networks():
 if __name__ == "__main__":
     # save_ppo_networks()
     save_to_file()
-    # print("")
-    # load_from_file()
+    print("")
+    load_from_file()

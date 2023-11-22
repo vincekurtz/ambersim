@@ -165,8 +165,6 @@ class MLP(nn.Module):
     """
 
     layer_sizes: Sequence[int]
-    activation: networks.ActivationFn = nn.relu
-    kernel_init: networks.Initializer = nn.initializers.lecun_uniform()
     activate_final: bool = False
     bias: bool = True
 
@@ -181,12 +179,11 @@ class MLP(nn.Module):
         for i, layer_size in enumerate(self.layer_sizes):
             x = nn.Dense(
                 layer_size,
-                kernel_init=self.kernel_init,
                 use_bias=self.bias,
                 name=f"dense_{i}",
             )(x)
             if i != len(self.layer_sizes) - 1 or self.activate_final:
-                x = self.activation(x)
+                x = nn.relu(x)
         return x
 
 
