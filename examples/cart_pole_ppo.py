@@ -2,19 +2,16 @@ import functools
 import pickle
 import time
 from datetime import datetime
-from typing import Sequence
 
-import flax
 import jax
 import mujoco
 import mujoco.viewer
 from brax import envs
 from brax.io import model
-from brax.training import distribution, networks, types
+from brax.training import distribution
 from brax.training.acme import running_statistics
 from brax.training.agents.ppo import train as ppo
 from brax.training.agents.ppo.networks import make_inference_fn
-from flax import linen
 from jax import numpy as jp
 from mujoco import mjx
 from torch.utils.tensorboard import SummaryWriter
@@ -114,152 +111,6 @@ class CartPole(MjxEnv):
         return jp.concatenate([data.qpos, data.qvel])
 
 
-@flax.struct.dataclass
-class CustomPPONetworks:
-    """Custom PPO networks."""
-
-    policy_network: networks.FeedForwardNetwork
-    value_network: networks.FeedForwardNetwork
-    parametric_action_distribution: distribution.ParametricDistribution
-
-
-class SequentialMLP(linen.Module):
-    """Your standard multi-layer perceptron."""
-
-    layer_sizes: Sequence[int]
-    activation: networks.ActivationFn = linen.relu
-    kernel_init: networks.Initializer = jax.nn.initializers.lecun_uniform()
-    activate_final: bool = False
-    bias: bool = True
-
-    @linen.compact
-    def __call__(self, data: jp.ndarray):
-        """Run the thing."""
-        output_size = self.layer_sizes[-1]
-        hidden = data
-        for i, hidden_size in enumerate(self.layer_sizes[:-1]):
-            hidden = linen.Dense(hidden_size, name=f"hidden_{i}", kernel_init=self.kernel_init, use_bias=self.bias)(
-                hidden
-            )
-            hidden = self.activation(hidden)
-            hidden = linen.Dense(output_size, name=f"output_{i}", kernel_init=self.kernel_init, use_bias=self.bias)(
-                hidden
-            )
-        return hidden
-
-
-class ParallelMLP(linen.Module):
-    """A multi-layer perceptron where all layers are flattened into one."""
-
-    layer_sizes: Sequence[int]
-    activation: networks.ActivationFn = linen.relu
-    kernel_init: networks.Initializer = jax.nn.initializers.lecun_uniform()
-    activate_final: bool = False
-    bias: bool = True
-
-    @linen.compact
-    def __call__(self, data: jp.ndarray):
-        """Run the thing."""
-        output_size = self.layer_sizes[-1]
-
-        # Evaluate each layer, mapping from the input to the output size
-        hidden_outputs = []
-        for i, hidden_size in enumerate(self.layer_sizes[:-1]):
-            hidden = linen.Dense(hidden_size, name=f"hidden_{i}", kernel_init=self.kernel_init, use_bias=self.bias)(
-                data
-            )
-            hidden = self.activation(hidden)
-            hidden = linen.Dense(output_size, name=f"output_{i}", kernel_init=self.kernel_init, use_bias=self.bias)(
-                hidden
-            )
-            hidden_outputs.append(hidden)
-
-        # Total output is the summ of all the hidden outputs
-        return sum(hidden_outputs)
-
-
-class HierarchicalMLP(linen.Module):
-    """MLP structure based on classical hierarchical control architectures."""
-
-    layer_sizes: Sequence[int]
-    activation: networks.ActivationFn = linen.relu
-    kernel_init: networks.Initializer = jax.nn.initializers.lecun_uniform()
-    activate_final: bool = False
-    bias: bool = True
-
-    @linen.compact
-    def __call__(self, x: jp.ndarray):
-        """Run the thing."""
-        output_size = self.layer_sizes[-1]
-
-        # First layer maps input to output, [x, y]
-        y = linen.Dense(self.layer_sizes[0], name="hidden_0", kernel_init=self.kernel_init, use_bias=self.bias)(x)
-        y = self.activation(y)
-        y = linen.Dense(output_size, name="output_0", kernel_init=self.kernel_init, use_bias=self.bias)(y)
-
-        # Subsequent layers map [x, y] --> y
-        for i, hidden_size in enumerate(self.layer_sizes[1:-1]):
-            y = jp.concatenate([x, y], axis=-1)
-            y = linen.Dense(hidden_size, name=f"hidden_{i + 1}", kernel_init=self.kernel_init, use_bias=self.bias)(y)
-            y = self.activation(y)
-            y = linen.Dense(output_size, name=f"output_{i + 1}", kernel_init=self.kernel_init, use_bias=self.bias)(y)
-        return y
-
-
-def make_custom_policy_network(
-    output_size: int,
-    obs_size: int,
-    preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
-    hidden_layer_sizes: Sequence[int] = (256, 256),
-    activation: networks.ActivationFn = linen.relu,
-) -> networks.FeedForwardNetwork:
-    """Creates a policy network."""
-    policy_module = MLP(
-        layer_sizes=list(hidden_layer_sizes) + [output_size],
-        activation=activation,
-        kernel_init=jax.nn.initializers.lecun_uniform(),
-    )
-
-    def apply(processor_params, policy_params, obs):
-        """Apply the policy network."""
-        obs = preprocess_observations_fn(obs, processor_params)
-        return policy_module.apply(policy_params, obs)
-
-    dummy_obs = jp.zeros((1, obs_size))
-    return networks.FeedForwardNetwork(init=lambda key: policy_module.init(key, dummy_obs), apply=apply)
-
-
-def make_custom_ppo_networks(
-    observation_size: int,
-    action_size: int,
-    preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
-    policy_hidden_layer_sizes: Sequence[int] = (32,) * 4,
-    value_hidden_layer_sizes: Sequence[int] = (256,) * 5,
-    activation: networks.ActivationFn = linen.swish,
-) -> CustomPPONetworks:
-    """Make some PPO networks (value network and policy network) with a custom architecture."""
-    parametric_action_distribution = distribution.NormalTanhDistribution(event_size=action_size)
-    policy_network = make_custom_policy_network(
-        parametric_action_distribution.param_size,
-        observation_size,
-        preprocess_observations_fn=preprocess_observations_fn,
-        hidden_layer_sizes=policy_hidden_layer_sizes,
-        activation=activation,
-    )
-    value_network = networks.make_value_network(
-        observation_size,
-        preprocess_observations_fn=preprocess_observations_fn,
-        hidden_layer_sizes=value_hidden_layer_sizes,
-        activation=activation,
-    )
-
-    return CustomPPONetworks(
-        policy_network=policy_network,
-        value_network=value_network,
-        parametric_action_distribution=parametric_action_distribution,
-    )
-
-
 def train():
     """Train a policy to swing up the cart-pole, then save the trained policy."""
     print("Creating cart-pole environment...")
@@ -268,7 +119,7 @@ def train():
 
     # Use a custom network architecture
     print("Creating policy network...")
-    policy_network = HierarchyComposition(module_type=MLP, num_modules=30, module_kwargs={"layer_sizes": [512, 2]})
+    policy_network = HierarchyComposition(module_type=MLP, num_modules=5, module_kwargs={"layer_sizes": [512, 2]})
     value_network = MLP(layer_sizes=[256, 256, 1])
     network_wrapper = BraxPPONetworksWrapper(
         policy_network=policy_network,
