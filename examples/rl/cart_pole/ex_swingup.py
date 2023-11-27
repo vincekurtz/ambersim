@@ -12,104 +12,17 @@ from brax.training import distribution
 from brax.training.acme import running_statistics
 from brax.training.agents.ppo import train as ppo
 from brax.training.agents.ppo.networks import make_inference_fn
-from jax import numpy as jp
 from mujoco import mjx
 from tensorboardX import SummaryWriter
 
 from ambersim.learning.architectures import MLP, HierarchyComposition, ParallelComposition, SeriesComposition
-from ambersim.rl.base import MjxEnv, State
 from ambersim.rl.cart_pole.swingup import CartPoleSwingupEnv
 from ambersim.rl.helpers import BraxPPONetworksWrapper
-from ambersim.utils.io_utils import load_mj_model_from_file
 
 """
 This example demonstrates using brax PPO + MJX to train a policy for a simple
 cart-pole.
 """
-
-
-# class CartPole(MjxEnv):
-#    """Training environment for a simple cart-pole."""
-#
-#    def __init__(
-#        self,
-#        upright_angle_cost: float = 1.0,
-#        center_cart_cost: float = 0.01,
-#        velocity_cost: float = 0.01,
-#        control_cost: float = 0.001,
-#        termination_threshold: float = 0.2,
-#        **kwargs,
-#    ):
-#        """Initializes the cart-pole environment."""
-#        path = "models/cart_pole/cart_pole.xml"
-#        mj_model = load_mj_model_from_file(path)
-#        mj_model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON
-#
-#        physics_steps_per_control_step = 1
-#        kwargs["physics_steps_per_control_step"] = kwargs.get(
-#            "physics_steps_per_control_step", physics_steps_per_control_step
-#        )
-#
-#        super().__init__(mj_model=mj_model, **kwargs)
-#
-#        self._upright_angle_cost = upright_angle_cost
-#        self._center_cart_cost = center_cart_cost
-#        self._velocity_cost = velocity_cost
-#        self._control_cost = control_cost
-#
-#        # Stop the episode if the pole falls over too far
-#        self._termination_threshold = termination_threshold
-#
-#    def reset(self, rng: jp.ndarray) -> State:
-#        """Resets the environment to a new initial state."""
-#        rng, rng1, rng2 = jax.random.split(rng, 3)
-#
-#        low = -(self._termination_threshold - 0.05)
-#        hi = self._termination_threshold - 0.05
-#        qpos = self.sys.qpos0 + jax.random.uniform(rng1, (self.sys.nq,), minval=low, maxval=hi)
-#        qvel = jax.random.uniform(rng2, (self.sys.nv,), minval=low, maxval=hi)
-#
-#        data = self.pipeline_init(qpos, qvel)
-#        obs = self._get_obs(data, jp.zeros(self.sys.nu))
-#        reward, done, zero = jp.zeros(3)
-#        metrics = {
-#            "reward": zero,
-#            "upright_reward": zero,
-#            "center_cart_reward": zero,
-#            "velocity_reward": zero,
-#            "control_reward": zero,
-#        }
-#        return State(data, obs, reward, done, metrics)
-#
-#    def step(self, state: State, action: jp.ndarray) -> State:
-#        """Steps the environment forward one timestep."""
-#        data0 = state.pipeline_state
-#        data = self.pipeline_step(data0, action)
-#        obs = self._get_obs(data, action)
-#
-#        # Compute the reward
-#        upright_reward = 1.0 - self._upright_angle_cost * obs[1] ** 2
-#        center_cart_reward = -self._center_cart_cost * obs[0] ** 2
-#        velocity_reward = -self._velocity_cost * (obs[2] ** 2 + obs[3] ** 2)
-#        control_reward = -self._control_cost * action[0] ** 2
-#        reward = upright_reward + center_cart_reward + velocity_reward + control_reward
-#
-#        # Check if the episode is done
-#        done = jp.where(jp.abs(obs[1]) > self._termination_threshold, 1.0, 0.0)
-#
-#        state.metrics.update(
-#            reward=reward,
-#            upright_reward=upright_reward,
-#            center_cart_reward=center_cart_reward,
-#            velocity_reward=velocity_reward,
-#            control_reward=control_reward,
-#        )
-#
-#        return state.replace(pipeline_state=data, obs=obs, reward=reward, done=done)
-#
-#    def _get_obs(self, data: mjx.Data, action: jp.ndarray) -> jp.ndarray:
-#        """Return the observation, [cos(theta), sin(theta), theta_dot]."""
-#        return jp.concatenate([data.qpos, data.qvel])
 
 
 def train():
@@ -157,7 +70,7 @@ def train():
     )
 
     # Set up tensorboard logging
-    log_dir = "/tmp/mjx_brax_logs/cart_pole_hierarchy"
+    log_dir = "/tmp/mjx_brax_logs/cart_pole"
     print(f"Setting up tensorboard at {log_dir}...")
     writer = SummaryWriter(log_dir)
 
