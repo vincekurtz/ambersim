@@ -1,32 +1,27 @@
 import functools
+import pickle
 import time
 from datetime import datetime
 from typing import Sequence
 
-# mujoco viewer must be imported before jax on 22.04
-# isort: off
-import mujoco
-import mujoco.viewer
-
-# isort: on
-
-import pickle
-
 import flax
 import jax
+import mujoco
+import mujoco.viewer
 from brax import envs
 from brax.io import model
 from brax.training import distribution, networks, types
 from brax.training.acme import running_statistics
-from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.ppo import train as ppo
+from brax.training.agents.ppo.networks import make_inference_fn
 from flax import linen
 from jax import numpy as jp
 from mujoco import mjx
 from torch.utils.tensorboard import SummaryWriter
 
+from ambersim.learning.architectures import MLP, HierarchyComposition, ParallelComposition, SeriesComposition
 from ambersim.rl.base import MjxEnv, State
-from ambersim.rl.policies import MLP, BraxPPONetworkWrapper, make_ppo_networks_from_config
+from ambersim.rl.helpers import BraxPPONetworksWrapper
 from ambersim.utils.io_utils import load_mj_model_from_file
 
 """
@@ -273,13 +268,15 @@ def train():
 
     # Use a custom network architecture
     print("Creating policy network...")
-    policy_network = MLP(layer_sizes=[512, 2])
+    policy_network = HierarchyComposition(module_type=MLP, num_modules=30, module_kwargs={"layer_sizes": [512, 2]})
     value_network = MLP(layer_sizes=[256, 256, 1])
-    ppo_networks = BraxPPONetworkWrapper(
+    network_wrapper = BraxPPONetworksWrapper(
         policy_network=policy_network,
         value_network=value_network,
         action_distribution=distribution.NormalTanhDistribution,
     )
+
+    print(policy_network)
 
     # Create the PPO agent
     print("Creating PPO agent...")
@@ -300,7 +297,7 @@ def train():
         num_envs=1024,
         batch_size=512,
         clipping_epsilon=0.2,
-        network_factory=ppo_networks.network_factory,
+        network_factory=network_wrapper.make_ppo_networks,
         seed=0,
     )
 
@@ -334,11 +331,11 @@ def train():
 
     # Save the trained policy
     print("Saving trained policy...")
-    params_path = "/tmp/cart_pole_params"
+    params_path = "/tmp/cart_pole_params.pkl"
     networks_path = "/tmp/cart_pole_networks.pkl"
     model.save_params(params_path, params)
     with open(networks_path, "wb") as f:
-        pickle.dump(ppo_networks, f)
+        pickle.dump(network_wrapper, f)
 
 
 def test(start_angle=0.0):
@@ -354,7 +351,7 @@ def test(start_angle=0.0):
 
     # Load the saved policy
     print("Loading policy ...")
-    params_path = "/tmp/cart_pole_params"
+    params_path = "/tmp/cart_pole_params.pkl"
     networks_path = "/tmp/cart_pole_networks.pkl"
     params = model.load_params(params_path)
     with open(networks_path, "rb") as f:
@@ -362,14 +359,16 @@ def test(start_angle=0.0):
 
     # Create the policy network
     print("Creating policy network...")
-    ppo_network = network_wrapper.network_factory(
-        env.observation_size, env.action_size, preprocess_observations_fn=running_statistics.normalize
+    ppo_networks = network_wrapper.make_ppo_networks(
+        observation_size=env.observation_size,
+        action_size=env.action_size,
+        preprocess_observations_fn=running_statistics.normalize,
     )
-    print(ppo_network)
-    print(type(ppo_network))
 
-    make_inference_fn = ppo_networks.make_inference_fn(ppo_network)
-    policy = make_inference_fn(params)
+    print(network_wrapper.policy_network)
+
+    make_policy = make_inference_fn(ppo_networks)
+    policy = make_policy(params, deterministic=True)
     jit_policy = jax.jit(policy)
 
     # Set the initial state
