@@ -28,10 +28,12 @@ class CartPoleSwingupConfig:
     control_cost: float = 0.001
 
     # Ranges for sampling initial conditions
-    qpos_hi: float = 1
-    qpos_lo: float = -1
-    qvel_hi: float = 2
-    qvel_lo: float = -2
+    pos_hi: float = 1
+    pos_lo: float = -1
+    theta_hi: float = jnp.pi
+    theta_lo: float = -jnp.pi
+    qvel_hi: float = 0.1
+    qvel_lo: float = -0.1
 
 
 class CartPoleSwingupEnv(MjxEnv):
@@ -81,7 +83,9 @@ class CartPoleSwingupEnv(MjxEnv):
         rng, rng1, rng2 = jax.random.split(rng, 3)
 
         # Reset positions and velocities
-        qpos = jax.random.uniform(rng1, (self.sys.nq,), minval=self.config.qpos_lo, maxval=self.config.qpos_hi)
+        qpos_lo = jnp.array([self.config.pos_lo, self.config.theta_lo])
+        qpos_hi = jnp.array([self.config.pos_hi, self.config.theta_hi])
+        qpos = jax.random.uniform(rng1, (self.sys.nq,), minval=qpos_lo, maxval=qpos_hi)
         qvel = jax.random.uniform(rng2, (self.sys.nv,), minval=self.config.qvel_lo, maxval=self.config.qvel_hi)
         data = self.pipeline_init(qpos, qvel)
 

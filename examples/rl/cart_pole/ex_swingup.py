@@ -43,7 +43,7 @@ def train():
     print(policy_network)
 
     # Set the number of training steps and evaluations
-    num_timesteps = 5_000_000
+    num_timesteps = 10_000_000
     eval_every = 100_000
     num_evals = num_timesteps // eval_every
 
@@ -58,13 +58,14 @@ def train():
         normalize_observations=True,
         action_repeat=1,
         unroll_length=10,
-        num_minibatches=32,
-        num_updates_per_batch=8,
+        num_minibatches=64,
+        num_updates_per_batch=16,
         discounting=0.97,
         learning_rate=3e-4,
-        entropy_cost=1e-4,
+        entropy_cost=1e-5,
         num_envs=1024,
         batch_size=512,
+        clipping_epsilon=0.2,
         network_factory=network_wrapper.make_ppo_networks,
         seed=0,
     )
@@ -165,5 +166,5 @@ def test(start_angle=0.0):
 
 
 if __name__ == "__main__":
-    train()
-    test()
+    # train()
+    test(3.14)

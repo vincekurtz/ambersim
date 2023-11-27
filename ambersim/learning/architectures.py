@@ -133,7 +133,10 @@ class HierarchyComposition(nn.Module):
     num_modules: int
     module_kwargs: dict
 
-    @nn.compact
+    def setup(self):
+        """Initialize the network."""
+        self.modules = [self.module_type(**self.module_kwargs) for _ in range(self.num_modules)]
+
     def __call__(self, x: jnp.ndarray):
         """Forward pass through the network.
 
@@ -141,10 +144,10 @@ class HierarchyComposition(nn.Module):
             x: Input to the network.
         """
         # First module takes only the global input, x --> y
-        y = self.module_type(**self.module_kwargs)(x)
+        y = self.modules[0](x)
 
         # Subsequent modules also take the previous output, [x, y] --> y
         # TODO(vincekurtz): use jax control flow
-        for _ in range(self.num_modules - 1):
-            y = self.module_type(**self.module_kwargs)(jnp.concatenate([x, y], axis=-1))
+        for i in range(1, self.num_modules):
+            y = self.modules[i](jnp.concatenate([x, y], axis=-1))
         return y
