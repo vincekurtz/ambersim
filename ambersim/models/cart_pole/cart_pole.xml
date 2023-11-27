@@ -1,4 +1,5 @@
 <mujoco model="cart_pole">
+    <option timestep="0.02" iterations="5" ls_iterations="10" />
     <compiler inertiafromgeom="true" />
     <default>
         <joint armature="0" damping="1" limited="true" />
