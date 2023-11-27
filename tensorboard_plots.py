@@ -54,18 +54,13 @@ def plot_learning_curve(log_dir, label):
 
     # Plot the mean and standard deviation
     plt.plot(steps[:], mean_reward, label=label, linewidth=2)
-    # plt.fill_between(steps[:], mean_reward - std_reward,
-    #                 mean_reward + std_reward, alpha=0.3)
+    plt.fill_between(steps[:], mean_reward - std_reward, mean_reward + std_reward, alpha=0.3)
 
 
-def make_subplot(num_blocks):
-    """Make a little subplot."""
-    series = f"/tmp/mjx_brax_logs/cart_pole_series_{num_blocks}"
-    parallel = f"/tmp/mjx_brax_logs/cart_pole_parallel_{num_blocks}"
-    hierarchy = f"/tmp/mjx_brax_logs/cart_pole_hierarchy_{num_blocks}"
-    plot_learning_curve(series, "Series")
-    plot_learning_curve(parallel, "Parallel")
-    plot_learning_curve(hierarchy, "Hierarchy")
+if __name__ == "__main__":
+    plot_learning_curve("/tmp/mjx_brax_logs/cart_pole_series", "Series")
+    plot_learning_curve("/tmp/mjx_brax_logs/cart_pole_hierarchy", "Hierarchy")
+    plot_learning_curve("/tmp/mjx_brax_logs/cart_pole_parallel", "Parallel")
 
     # Use a nicer formatting for large numbers
     ax = plt.gca()
@@ -73,20 +68,8 @@ def make_subplot(num_blocks):
     mkformatter = ticker.FuncFormatter(mkfunc)
     ax.xaxis.set_major_formatter(mkformatter)
 
-    plt.title(f"{num_blocks} Blocks")
+    plt.title("Cart-Pole Swingup")
     plt.ylabel("Reward")
     plt.xlabel("Simulated Timesteps")
-
-
-if __name__ == "__main__":
-    plt.subplot(1, 3, 1)
-    make_subplot(3)
-
-    plt.subplot(1, 3, 2)
-    make_subplot(9)
-
-    plt.subplot(1, 3, 3)
-    make_subplot(27)
-
     plt.legend()
     plt.show()
