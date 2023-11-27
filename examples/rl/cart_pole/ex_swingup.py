@@ -4,8 +4,10 @@ import time
 from datetime import datetime
 
 import jax
+import matplotlib.pyplot as plt
 import mujoco
 import mujoco.viewer
+import numpy as np
 from brax import envs
 from brax.io import model
 from brax.training import distribution
@@ -165,6 +167,94 @@ def test(start_angle=0.0):
                 time.sleep(dt - elapsed)
 
 
+def introspect():
+    """Load a trained policy and inspect the output of various layers."""
+    # Create an environment for evaluation
+    print("Creating test environment...")
+    envs.register_environment("cart_pole", CartPoleSwingupEnv)
+    env = envs.get_environment("cart_pole")
+    mj_model = env.model
+
+    mj_data = mujoco.MjData(mj_model)
+    mj_data.qpos[1] = 0.05
+    obs = env.compute_obs(mjx.device_put(mj_data), {})
+
+    # Load the saved policy
+    print("Loading saved params ...")
+    params_path = "/tmp/cart_pole_params.pkl"
+    networks_path = "/tmp/cart_pole_networks.pkl"
+    params = model.load_params(params_path)
+    with open(networks_path, "rb") as f:
+        network_wrapper = pickle.load(f)
+
+    # Create the policy network
+    print("Creating policy network...")
+    assert isinstance(network_wrapper.policy_network, HierarchyComposition)
+
+    # Define some functions for looking at various layers
+    @jax.jit
+    def get_final_output(obs):
+        return network_wrapper.policy_network.apply(params[1], obs)
+
+    @jax.jit
+    def get_first_layer_output(obs):
+        return network_wrapper.policy_network.apply(params[1], obs, method=lambda net, x: net.modules[0](x))
+
+    print("Jitting policy functions...")
+    u = get_final_output(obs)
+    print("u:", u)
+    u0 = get_first_layer_output(obs)
+    print("u0:", u0)
+
+    # Run a little simulation
+    print("Running simulation...")
+    num_steps = 100
+    u0s = []
+    us = []
+    with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
+        for _ in range(num_steps):
+            step_start = time.time()
+
+            # Compute and record network outputs
+            u0 = get_first_layer_output(obs)
+            u = get_final_output(obs)
+            u0s.append(u0)
+            us.append(u)
+
+            # Apply the policy
+            mj_data.ctrl = u[0]
+            obs = env.compute_obs(mjx.device_put(mj_data), {})
+
+            # Step the simulation
+            for _ in range(env._physics_steps_per_control_step):
+                mujoco.mj_step(mj_model, mj_data)
+                viewer.sync()
+
+            # Try to run in roughly real time
+            elapsed = time.time() - step_start
+            dt = float(env.dt)
+            if elapsed < dt:
+                time.sleep(dt - elapsed)
+
+    # Plot the network outputs
+    u0s = np.array(u0s)
+    us = np.array(us)
+    t = float(env.dt) * np.arange(num_steps)
+
+    plt.subplot(2, 1, 1)
+    plt.plot(t, u0s[:, 0])
+    plt.xlabel("time (s)")
+    plt.ylabel("first layer output")
+
+    plt.subplot(2, 1, 2)
+    plt.plot(t, us[:, 0])
+    plt.xlabel("time (s)")
+    plt.ylabel("final output")
+
+    plt.show()
+
+
 if __name__ == "__main__":
     # train()
-    test(3.14)
+    # test()
+    introspect()
