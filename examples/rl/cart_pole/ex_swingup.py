@@ -14,7 +14,7 @@ from brax.training.agents.ppo import train as ppo
 from brax.training.agents.ppo.networks import make_inference_fn
 from jax import numpy as jp
 from mujoco import mjx
-from torch.utils.tensorboard import SummaryWriter
+from tensorboardX import SummaryWriter
 
 from ambersim.learning.architectures import MLP, HierarchyComposition, ParallelComposition, SeriesComposition
 from ambersim.rl.base import MjxEnv, State
