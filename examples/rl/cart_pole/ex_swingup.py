@@ -127,17 +127,21 @@ def train():
         value_network=value_network,
         action_distribution=distribution.NormalTanhDistribution,
     )
-
     print(policy_network)
+
+    # Set the number of training steps and evaluations
+    num_timesteps = 5_000_000
+    eval_every = 100_000
+    num_evals = num_timesteps // eval_every
 
     # Create the PPO agent
     print("Creating PPO agent...")
     train_fn = functools.partial(
         ppo.train,
-        num_timesteps=1_000_000,
-        num_evals=50,
-        reward_scaling=0.1,
+        num_timesteps=num_timesteps,
+        num_evals=num_evals,
         episode_length=200,
+        reward_scaling=0.1,
         normalize_observations=True,
         action_repeat=1,
         unroll_length=10,
@@ -145,7 +149,7 @@ def train():
         num_updates_per_batch=8,
         discounting=0.97,
         learning_rate=3e-4,
-        entropy_cost=0,
+        entropy_cost=1e-4,
         num_envs=1024,
         batch_size=512,
         network_factory=network_wrapper.make_ppo_networks,
@@ -153,7 +157,7 @@ def train():
     )
 
     # Set up tensorboard logging
-    log_dir = "/tmp/mjx_brax_logs/cart_pole"
+    log_dir = "/tmp/mjx_brax_logs/cart_pole_hierarchy"
     print(f"Setting up tensorboard at {log_dir}...")
     writer = SummaryWriter(log_dir)
 
