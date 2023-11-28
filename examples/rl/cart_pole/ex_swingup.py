@@ -27,7 +27,7 @@ cart-pole.
 """
 
 
-def train():
+def train(num_modules, composition_type):
     """Train a policy to swing up the cart-pole, then save the trained policy."""
     print("Creating cart-pole environment...")
     envs.register_environment("cart_pole", CartPoleSwingupEnv)
@@ -35,7 +35,21 @@ def train():
 
     # Use a custom network architecture
     print("Creating policy network...")
-    policy_network = HierarchyComposition(module_type=MLP, num_modules=3, module_kwargs={"layer_sizes": [512, 2]})
+    if composition_type == "series":
+        policy_network = SeriesComposition(
+            module_type=MLP, num_modules=num_modules, module_kwargs={"layer_sizes": [4, 2]}
+        )
+    elif composition_type == "parallel":
+        policy_network = ParallelComposition(
+            module_type=MLP, num_modules=num_modules, module_kwargs={"layer_sizes": [4, 2]}
+        )
+    elif composition_type == "hierarchy":
+        policy_network = HierarchyComposition(
+            module_type=MLP, num_modules=num_modules, module_kwargs={"layer_sizes": [4, 2]}
+        )
+    else:
+        raise ValueError(f"Unknown composition type: {composition_type}")
+
     value_network = MLP(layer_sizes=[256, 256, 1])
     network_wrapper = BraxPPONetworksWrapper(
         policy_network=policy_network,
@@ -45,7 +59,7 @@ def train():
     print(policy_network)
 
     # Set the number of training steps and evaluations
-    num_timesteps = 10_000_000
+    num_timesteps = 5_000_000
     eval_every = 100_000
     num_evals = num_timesteps // eval_every
 
@@ -73,7 +87,7 @@ def train():
     )
 
     # Set up tensorboard logging
-    log_dir = "/tmp/mjx_brax_logs/cart_pole"
+    log_dir = f"/tmp/mjx_brax_logs/cart_pole_{composition_type}_{num_modules}"
     print(f"Setting up tensorboard at {log_dir}...")
     writer = SummaryWriter(log_dir)
 
@@ -208,7 +222,7 @@ def introspect():
 
     # Run a little simulation
     print("Running simulation...")
-    num_steps = 100
+    num_steps = 500
     u0s = []
     us = []
     with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
@@ -255,6 +269,12 @@ def introspect():
 
 
 if __name__ == "__main__":
+    composition_types = ["series", "parallel", "hierarchy"]
+    module_sizes = [1, 4, 7, 10, 13, 16, 19, 22, 25, 30]
+    for composition_type in composition_types:
+        for num_modules in module_sizes:
+            train(num_modules=num_modules, composition_type=composition_type)
+    # train(num_modules=40, composition_type="hierarchy")
     # train()
     # test()
-    introspect()
+    # introspect()
