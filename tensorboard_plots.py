@@ -77,10 +77,13 @@ def compare_learning_curves():
 
 
 if __name__ == "__main__":
-    plt.title("Cart-Pole Swingup: N modules with 4 hidden units each")
     module_sizes = [1, 4, 7, 10, 13, 16, 19, 22, 25, 30]
 
-    # plt.subplot(1, 3, 1)
+    # Set up color cycle so each subplot uses different colors
+    color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+
+    plt.subplot(1, 3, 1)
+    plt.title("Parallel")
     composition_type = "parallel"
     series_mean = []
     series_std = []
@@ -91,16 +94,22 @@ if __name__ == "__main__":
         series_mean.append(mean[-1])
         series_std.append(std[-1])
 
-    plt.plot(module_sizes, series_mean, label="Series", linewidth=2)
+    color = color_cycle[0]
+    plt.plot(module_sizes, series_mean, label="Series", linewidth=2, color=color)
     plt.fill_between(
         module_sizes,
         np.array(series_mean) - np.array(series_std),
         np.array(series_mean) + np.array(series_std),
         alpha=0.3,
+        color=color,
     )
-    # plt.ylim(-1700, -400)
+    plt.ylim(-1700, -300)
+    plt.ylabel("Final Reward")
+    plt.xlabel("Number of modules")
 
-    # plt.subplot(1, 3, 2)
+    plt.subplot(1, 3, 2)
+    plt.title("Series")
+
     composition_type = "series"
     parallel_mean = []
     parallel_std = []
@@ -111,16 +120,20 @@ if __name__ == "__main__":
         parallel_mean.append(mean[-1])
         parallel_std.append(std[-1])
 
-    plt.plot(module_sizes, parallel_mean, label="Parallel", linewidth=2)
+    color = color_cycle[1]
+    plt.plot(module_sizes, parallel_mean, label="Parallel", linewidth=2, color=color)
     plt.fill_between(
         module_sizes,
         np.array(parallel_mean) - np.array(parallel_std),
         np.array(parallel_mean) + np.array(parallel_std),
         alpha=0.3,
+        color=color,
     )
-    # plt.ylim(-1700, -400)
+    plt.ylim(-1700, -300)
+    plt.xlabel("Number of modules")
 
-    # plt.subplot(1, 3, 3)
+    plt.subplot(1, 3, 3)
+    plt.title("Hierarchy")
     composition_type = "hierarchy"
     hierarchy_mean = []
     hierarchy_std = []
@@ -131,17 +144,19 @@ if __name__ == "__main__":
         hierarchy_mean.append(mean[-1])
         hierarchy_std.append(std[-1])
 
-    plt.plot(module_sizes, hierarchy_mean, label="Hierarchy", linewidth=2)
+    color = color_cycle[2]
+    plt.plot(module_sizes, hierarchy_mean, label="Hierarchy", linewidth=2, color=color)
     plt.fill_between(
         module_sizes,
         np.array(hierarchy_mean) - np.array(hierarchy_std),
         np.array(hierarchy_mean) + np.array(hierarchy_std),
         alpha=0.3,
+        color=color,
     )
-    # plt.ylim(-1700, -400)
-
-    plt.ylabel("Reward")
+    plt.ylim(-1700, -300)
     plt.xlabel("Number of modules")
-    plt.legend()
+
+    # Set overall title
+    plt.suptitle("Cart-Pole Swingup: 4 hidden units per module")
 
     plt.show()
