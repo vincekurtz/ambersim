@@ -175,7 +175,14 @@ class NestedLinearPolicy(nn.Module):
     Here the measurment functions M_i are arbitrary neural networks, and the
     controllers K_i are linear layers.
 
+    Args:
+        measurement_networks: Type of measurement network to create
+        measurement_network_kwargs: Keyword arguments to pass to each measurement network.
+        linear_policy_kwargs: Keyword arguments to pass to each linear policy.
 
+    Note: the length of measurement_networks, measurement_network_kwargs, and
+    linear_policy_kwargs must be the same. The output size is specified by the
+    'features' keyword argument of the last linear policy.
     """
 
     measurement_networks: Sequence[nn.Module]

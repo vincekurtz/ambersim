@@ -18,7 +18,13 @@ from brax.training.agents.ppo.networks import make_inference_fn
 from mujoco import mjx
 from tensorboardX import SummaryWriter
 
-from ambersim.learning.architectures import MLP, HierarchyComposition, ParallelComposition, SeriesComposition
+from ambersim.learning.architectures import (
+    MLP,
+    HierarchyComposition,
+    NestedLinearPolicy,
+    ParallelComposition,
+    SeriesComposition,
+)
 from ambersim.rl.cart_pole.swingup import CartPoleSwingupEnv
 from ambersim.rl.helpers import BraxPPONetworksWrapper
 
@@ -28,7 +34,7 @@ cart-pole.
 """
 
 
-def train(num_modules, composition_type):
+def train():
     """Train a policy to swing up the cart-pole, then save the trained policy."""
     print("Creating cart-pole environment...")
     envs.register_environment("cart_pole", CartPoleSwingupEnv)
@@ -36,20 +42,11 @@ def train(num_modules, composition_type):
 
     # Use a custom network architecture
     print("Creating policy network...")
-    if composition_type == "series":
-        policy_network = SeriesComposition(
-            module_type=MLP, num_modules=num_modules, module_kwargs={"layer_sizes": [4, 2]}
-        )
-    elif composition_type == "parallel":
-        policy_network = ParallelComposition(
-            module_type=MLP, num_modules=num_modules, module_kwargs={"layer_sizes": [4, 2]}
-        )
-    elif composition_type == "hierarchy":
-        policy_network = HierarchyComposition(
-            module_type=MLP, num_modules=num_modules, module_kwargs={"layer_sizes": [4, 2]}
-        )
-    else:
-        raise ValueError(f"Unknown composition type: {composition_type}")
+    num_modules = 7
+    measurement_networks = [MLP for _ in range(num_modules)]
+    measurement_network_kwargs = [{"layer_sizes": (128, 2)} for _ in range(num_modules)]
+    linear_policy_kwargs = [{"features": 2} for _ in range(num_modules)]
+    policy_network = NestedLinearPolicy(measurement_networks, measurement_network_kwargs, linear_policy_kwargs)
 
     value_network = MLP(layer_sizes=[256, 256, 1])
     network_wrapper = BraxPPONetworksWrapper(
@@ -88,7 +85,7 @@ def train(num_modules, composition_type):
     )
 
     # Set up tensorboard logging
-    log_dir = f"/tmp/mjx_brax_logs/cart_pole_{composition_type}_{num_modules}"
+    log_dir = f"/tmp/mjx_brax_logs/cart_pole_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     print(f"Setting up tensorboard at {log_dir}...")
     writer = SummaryWriter(log_dir)
 
@@ -290,6 +287,6 @@ def introspect():
 
 
 if __name__ == "__main__":
-    # train()
+    train()
     # test()
-    introspect()
+    # introspect()
