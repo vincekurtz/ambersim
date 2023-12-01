@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import mujoco
 import mujoco.viewer
 import numpy as np
+import scipy
 from brax import envs
 from brax.io import model
 from brax.training import distribution
@@ -190,7 +191,7 @@ def introspect():
     mj_model = env.model
 
     mj_data = mujoco.MjData(mj_model)
-    mj_data.qpos[1] = 0.05
+    mj_data.qpos[1] = 0.0
     obs = env.compute_obs(mjx.device_put(mj_data), {})
 
     # Load the saved policy
@@ -222,7 +223,7 @@ def introspect():
 
     # Run a little simulation
     print("Running simulation...")
-    num_steps = 500
+    num_steps = 150
     u0s = []
     us = []
     with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
@@ -265,16 +266,30 @@ def introspect():
     plt.xlabel("time (s)")
     plt.ylabel("final output")
 
+    # Make another plot with frequency analysis
+    plt.figure()
+
+    # Normalize u0s and us
+    u0s = (u0s - np.mean(u0s)) / np.std(u0s)
+    us = (us - np.mean(us)) / np.std(us)
+
+    u0s_fft = scipy.fft.rfft(u0s[:, 0])
+    u0s_freq = scipy.fft.rfftfreq(len(u0s), d=float(env.dt))
+    us_fft = scipy.fft.rfft(us[:, 0])
+    us_freq = scipy.fft.rfftfreq(len(us), d=float(env.dt))
+
+    width = 0.2
+    plt.bar(u0s_freq - width / 2, np.abs(u0s_fft), width=width, label="top layer")
+    plt.bar(us_freq + width / 2, np.abs(us_fft), width=width, label="bottom layer")
+
+    plt.xlabel("frequency (Hz)")
+    plt.ylabel("amplitude")
+
+    plt.legend()
     plt.show()
 
 
 if __name__ == "__main__":
-    composition_types = ["series", "parallel", "hierarchy"]
-    module_sizes = [1, 4, 7, 10, 13, 16, 19, 22, 25, 30]
-    for composition_type in composition_types:
-        for num_modules in module_sizes:
-            train(num_modules=num_modules, composition_type=composition_type)
-    # train(num_modules=40, composition_type="hierarchy")
     # train()
     # test()
-    # introspect()
+    introspect()
