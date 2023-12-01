@@ -7,6 +7,7 @@ from ambersim.learning.architectures import (
     NestedLinearPolicy,
     ParallelComposition,
     SeriesComposition,
+    print_module_summary,
 )
 
 
@@ -25,7 +26,7 @@ def test_series():
     params = net.init(rng, dummy_input)
 
     # Print the network summary
-    print(net.tabulate(rng, dummy_input, depth=1))
+    print_module_summary(net, input_size)
 
     # Forward pass through the network
     my_input = jax.random.normal(rng, input_size)
@@ -48,7 +49,7 @@ def test_parallel():
     params = net.init(rng, dummy_input)
 
     # Print the network summary
-    print(net.tabulate(rng, dummy_input, depth=1))
+    print_module_summary(net, input_size)
 
     # Forward pass through the network
     my_input = jax.random.normal(rng, input_size)
@@ -71,7 +72,7 @@ def test_hierarchy():
     params = net.init(rng, dummy_input)
 
     # Print the network summary
-    print(net.tabulate(rng, dummy_input, depth=1))
+    print_module_summary(net, input_size)
 
     # Forward pass through the network
     my_input = jax.random.normal(rng, input_size)
@@ -104,7 +105,7 @@ def test_nested_linear():
     params = net.init(rng, dummy_input)
 
     # Print the network summary
-    print(net.tabulate(rng, dummy_input, depth=1))
+    print_module_summary(net, input_size)
 
     # Forward pass through the network
     my_input = jax.random.normal(rng, input_size)

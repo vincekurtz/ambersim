@@ -24,6 +24,7 @@ from ambersim.learning.architectures import (
     NestedLinearPolicy,
     ParallelComposition,
     SeriesComposition,
+    print_module_summary,
 )
 from ambersim.rl.cart_pole.swingup import CartPoleSwingupEnv
 from ambersim.rl.helpers import BraxPPONetworksWrapper
@@ -54,7 +55,7 @@ def train():
         value_network=value_network,
         action_distribution=distribution.NormalTanhDistribution,
     )
-    print(policy_network)
+    print_module_summary(policy_network, env.observation_size)
 
     # Set the number of training steps and evaluations
     num_timesteps = 5_000_000
@@ -149,7 +150,7 @@ def test(start_angle=0.0):
         action_size=env.action_size,
         preprocess_observations_fn=running_statistics.normalize,
     )
-    print(network_wrapper.policy_network)
+    print_module_summary(network_wrapper.policy_network, env.observation_size)
 
     make_policy = make_inference_fn(ppo_networks)
     policy = make_policy(params, deterministic=True)
@@ -287,6 +288,6 @@ def introspect():
 
 
 if __name__ == "__main__":
-    train()
-    # test()
+    # train()
+    test()
     # introspect()

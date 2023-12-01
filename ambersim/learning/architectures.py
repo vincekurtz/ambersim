@@ -1,7 +1,21 @@
 from typing import Sequence
 
 import flax.linen as nn
+import jax
 import jax.numpy as jnp
+
+
+def print_module_summary(module: nn.Module, input_shape: Sequence[int]):
+    """Print a readable summary of a flax neural network module.
+
+    Args:
+        module: The flax module to summarize.
+        input_shape: The shape of the input to the module.
+    """
+    # Create a dummy input
+    rng = jax.random.PRNGKey(0)
+    dummy_input = jnp.ones(input_shape)
+    print(module.tabulate(rng, dummy_input, depth=1))
 
 
 class MLP(nn.Module):
