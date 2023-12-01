@@ -43,11 +43,15 @@ def train():
 
     # Use a custom network architecture
     print("Creating policy network...")
-    num_modules = 7
+    num_modules = 20
     measurement_networks = [MLP for _ in range(num_modules)]
-    measurement_network_kwargs = [{"layer_sizes": (128, 2)} for _ in range(num_modules)]
+    measurement_network_kwargs = [{"layer_sizes": (8, 2)} for _ in range(num_modules)]
     linear_policy_kwargs = [{"features": 2} for _ in range(num_modules)]
     policy_network = NestedLinearPolicy(measurement_networks, measurement_network_kwargs, linear_policy_kwargs)
+
+    # policy_layer_sizes = [8 for _ in range(num_modules)]
+    # policy_layer_sizes.append(2)
+    # policy_network = MLP(layer_sizes=policy_layer_sizes)
 
     value_network = MLP(layer_sizes=[256, 256, 1])
     network_wrapper = BraxPPONetworksWrapper(
@@ -142,16 +146,15 @@ def test(start_angle=0.0):
     params = model.load_params(params_path)
     with open(networks_path, "rb") as f:
         network_wrapper = pickle.load(f)
+    print_module_summary(network_wrapper.policy_network, env.observation_size)
 
-    # Create the policy network
+    # Create the policy function
     print("Creating policy network...")
     ppo_networks = network_wrapper.make_ppo_networks(
         observation_size=env.observation_size,
         action_size=env.action_size,
         preprocess_observations_fn=running_statistics.normalize,
     )
-    print_module_summary(network_wrapper.policy_network, env.observation_size)
-
     make_policy = make_inference_fn(ppo_networks)
     policy = make_policy(params, deterministic=True)
     jit_policy = jax.jit(policy)
@@ -288,6 +291,6 @@ def introspect():
 
 
 if __name__ == "__main__":
-    # train()
+    train()
     test()
     # introspect()

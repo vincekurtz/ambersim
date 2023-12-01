@@ -24,7 +24,7 @@ class CartPoleSwingupConfig:
     # Reward function coefficients
     upright_angle_cost: float = 1.0
     center_cart_cost: float = 0.01
-    velocity_cost: float = 0.01
+    velocity_cost: float = 0.001
     control_cost: float = 0.001
 
     # Ranges for sampling initial conditions
