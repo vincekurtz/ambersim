@@ -151,3 +151,60 @@ class HierarchyComposition(nn.Module):
         for i in range(1, self.num_modules):
             y = self.modules[i](jnp.concatenate([x, y], axis=-1))
         return y
+
+
+class NestedLinearPolicy(nn.Module):
+    """A hierarchy of linear feedback controllers, each with different (learnable) inputs.
+
+    This is similar to many practical control architectures, where each layer has
+    access to different measurments (e.g. functions of raw observations) and passes
+    its output to the next layer.
+
+                    -------      -------
+               ---> | M_1 | ---> | K_1 |
+               |    -------      -------
+               |                    |
+               |    -------      -------
+         x --> |--> | M_2 | ---> | K_2 |
+               |    -------      -------
+               |                    |
+               |    -------      -------
+               ---> | M_3 | ---> | K_3 | ---> y
+                    -------      -------
+
+    Here the measurment functions M_i are arbitrary neural networks, and the
+    controllers K_i are linear layers.
+
+
+    """
+
+    measurement_networks: Sequence[nn.Module]
+    measurement_network_kwargs: Sequence[dict]
+    linear_policy_kwargs: Sequence[dict]
+
+    def setup(self):
+        """Initialize the network."""
+        self.nets = [
+            measurement_networks(**kwargs)
+            for measurement_networks, kwargs in zip(self.measurement_networks, self.measurement_network_kwargs)
+        ]
+        self.linear_policies = [nn.Dense(**kwargs) for kwargs in self.linear_policy_kwargs]
+
+    def __call__(self, x: jnp.ndarray):
+        """Forward pass through the network.
+
+        Args:
+            x: Input to the network.
+        """
+        # Compute the measurements
+        # TODO(vincekurtz): this can be parallelized
+        measurements = [net(x) for net in self.nets]
+
+        # Compute the linear feedback outputs. The first controller takes only
+        # it's own measurement, while subsequent controllers take the previous
+        # output as well.
+        y = self.linear_policies[0](measurements[0])
+        for i in range(1, len(self.linear_policies)):
+            y = self.linear_policies[i](jnp.concatenate([measurements[i], y], axis=-1))
+
+        return y
