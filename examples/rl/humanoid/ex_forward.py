@@ -7,8 +7,6 @@ import jax
 import matplotlib.pyplot as plt
 import mujoco
 import mujoco.viewer
-import numpy as np
-import scipy
 from brax import envs
 from brax.io import model
 from brax.training import distribution
@@ -71,6 +69,7 @@ def train():
         entropy_cost=1e-3,
         num_envs=2048,
         batch_size=1024,
+        network_factory=network_wrapper.make_ppo_networks,
         seed=0,
     )
 
@@ -131,9 +130,10 @@ def test():
     # Create the policy function
     print("Creating policy network...")
     ppo_networks = network_wrapper.make_ppo_networks(
-        observation_size=env.observation_size,
+        observation_size=obs.shape[0],
         action_size=env.action_size,
         preprocess_observations_fn=running_statistics.normalize,
+        check_sizes=True,
     )
     make_policy = make_inference_fn(ppo_networks)
     policy = make_policy(params, deterministic=True)
@@ -148,6 +148,7 @@ def test():
 
             # Apply the policy
             act, _ = jit_policy(obs, act_rng)
+
             mj_data.ctrl[:] = act
             obs = env.compute_obs(mjx.device_put(mj_data), {})
 
@@ -165,4 +166,4 @@ def test():
 
 if __name__ == "__main__":
     train()
-    # test()
+    test()
