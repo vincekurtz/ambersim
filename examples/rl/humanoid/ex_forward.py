@@ -42,8 +42,8 @@ def train():
 
     # Use a custom network architecture
     print("Creating policy network...")
-    policy_network = MLP(layer_sizes=[256, 256, 2 * env.action_size])  # Policy outputs mean and std dev
-    value_network = MLP(layer_sizes=[256, 256, 1])
+    policy_network = MLP(layer_sizes=[32, 32, 32, 32, 2 * env.action_size])  # Policy outputs mean and std dev
+    value_network = MLP(layer_sizes=[256, 256, 256, 256, 256, 1])
 
     network_wrapper = BraxPPONetworksWrapper(
         policy_network=policy_network,
@@ -53,10 +53,13 @@ def train():
     # print_module_summary(network_wrapper.policy_network, env.observation_size)
 
     # Create the PPO agent
+    num_timesteps = 30_000_000
+    eval_every = 500_000
+    num_evals = num_timesteps // eval_every
     train_fn = functools.partial(
         ppo.train,
-        num_timesteps=10,  # 30 M
-        num_evals=5,
+        num_timesteps=num_timesteps,
+        num_evals=num_evals,
         reward_scaling=0.1,
         episode_length=1000,
         normalize_observations=True,
