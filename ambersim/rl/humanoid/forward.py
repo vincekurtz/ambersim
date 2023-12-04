@@ -1,22 +1,23 @@
 from pathlib import Path
-from typing import Any, Dict, Optional, Union, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
-from flax import struct
 import mujoco
 from etils import epath
+from flax import struct
 from mujoco import mjx
 
 from ambersim.rl.base import MjxEnv, State
 from ambersim.utils.io_utils import load_mj_model_from_file
+
 
 @struct.dataclass
 class HumanoidForwardConfig:
     """Config dataclass for the humanoid forward locomotion task."""
 
     # Location of the model file
-    model_path = Path(epath.resource_path('mujoco')) / ('mjx/benchmark/model/humanoid')
+    model_path = Path(epath.resource_path("mujoco")) / ("mjx/benchmark/model/humanoid/humanoid.xml")
 
     # Number of "simulation steps" for every control input
     physics_steps_per_control_step: int = 5
@@ -31,7 +32,7 @@ class HumanoidForwardConfig:
     healthy_z_range: Tuple[float, float] = (1.0, 2.0)
     exclude_current_positions_from_observation: bool = True
 
-    # Range for sampling initial conditions 
+    # Range for sampling initial conditions
     reset_noise_scale: float = 1e-2
 
 
@@ -48,9 +49,8 @@ class HumanoidForwardEnv(MjxEnv):
         self.config = config
 
         # Load the model
-        model_path = config.model_path / 'humanoid.xml'
-        mj_model = load_mj_model_from_file(config.model_path / 'humanoid.xml')
-        
+        mj_model = load_mj_model_from_file(config.model_path)
+
         # Set solver parameters
         mj_model.opt.solver = mujoco.mjtSolver.mjSOL_CG
         mj_model.opt.iterations = 6
@@ -67,43 +67,41 @@ class HumanoidForwardEnv(MjxEnv):
         if self.config.exclude_current_positions_from_observation:
             position = position[2:]
 
-        return jnp.concatenate([
-            position,
-            data.qvel,
-            data.cinert[1:].ravel(),
-            data.cvel[1:].ravel(),
-            data.qfrc_actuator,
-        ])
+        return jnp.concatenate(
+            [
+                position,
+                data.qvel,
+                data.cinert[1:].ravel(),
+                data.cvel[1:].ravel(),
+                data.qfrc_actuator,
+            ]
+        )
 
     def reset(self, rng: jax.Array) -> State:
         """Reset the environment to a random initial state. See parent docstring."""
         rng, rng1, rng2 = jax.random.split(rng, 3)
 
         low, hi = -self.config.reset_noise_scale, self.config.reset_noise_scale
-        qpos = self.sys.qpos0 + jax.random.uniform(
-            rng1, (self.sys.nq,), minval=low, maxval=hi
-        )
-        qvel = jax.random.uniform(
-            rng2, (self.sys.nv,), minval=low, maxval=hi
-        )
+        qpos = self.sys.qpos0 + jax.random.uniform(rng1, (self.sys.nq,), minval=low, maxval=hi)
+        qvel = jax.random.uniform(rng2, (self.sys.nv,), minval=low, maxval=hi)
 
         data = self.pipeline_init(qpos, qvel)
 
         obs = self.compute_obs(data, {})
         reward, done, zero = jnp.zeros(3)
         metrics = {
-            'reward': reward,
-            'forward_reward': zero,
-            'reward_linvel': zero,
-            'reward_quadctrl': zero,
-            'reward_alive': zero,
-            'x_position': zero,
-            'y_position': zero,
-            'distance_from_origin': zero,
-            'x_velocity': zero,
-            'y_velocity': zero,
+            "reward": reward,
+            "forward_reward": zero,
+            "reward_linvel": zero,
+            "reward_quadctrl": zero,
+            "reward_alive": zero,
+            "x_position": zero,
+            "y_position": zero,
+            "distance_from_origin": zero,
+            "x_velocity": zero,
+            "y_velocity": zero,
         }
-        state_info = {'rng': rng, 'step': 0}
+        state_info = {"rng": rng, "step": 0}
         return State(data, obs, reward, done, metrics, state_info)
 
     def step(self, state: State, action: jax.Array) -> State:
@@ -118,9 +116,7 @@ class HumanoidForwardEnv(MjxEnv):
 
         min_z, max_z = self.config.healthy_z_range
         is_healthy = jnp.where(data.qpos[2] < min_z, x=0.0, y=1.0)
-        is_healthy = jnp.where(
-            data.qpos[2] > max_z, x=0.0, y=is_healthy
-        )
+        is_healthy = jnp.where(data.qpos[2] > max_z, x=0.0, y=is_healthy)
         if self.config.terminate_when_unhealthy:
             healthy_reward = self.config.healthy_reward
         else:
@@ -139,12 +135,10 @@ class HumanoidForwardEnv(MjxEnv):
             reward_alive=healthy_reward,
             x_position=com_after[0],
             y_position=com_after[1],
-            distance_from_origin=jp.linalg.norm(com_after),
+            distance_from_origin=jnp.linalg.norm(com_after),
             x_velocity=velocity[0],
             y_velocity=velocity[1],
         )
-        state.info['step'] += 1
+        state.info["step"] += 1
 
-        return state.replace(
-            pipeline_state=data, obs=obs, reward=reward, done=done
-        )
+        return state.replace(pipeline_state=data, obs=obs, reward=reward, done=done)
