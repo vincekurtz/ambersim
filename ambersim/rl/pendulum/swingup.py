@@ -3,7 +3,6 @@ from typing import Any, Dict, Optional, Union
 
 import jax
 import jax.numpy as jnp
-import mujoco as mj
 from flax import struct
 from mujoco import mjx
 
