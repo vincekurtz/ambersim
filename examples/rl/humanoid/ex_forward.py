@@ -42,7 +42,30 @@ def train():
 
     # Use a custom network architecture
     print("Creating policy network...")
-    policy_network = MLP(layer_sizes=[32, 32, 32, 32, 2 * env.action_size])  # Policy outputs mean and std dev
+    # policy_network = MLP(layer_sizes=[32, 32, 32, 32, 2*env.action_size])
+    # policy_network = HierarchyComposition(
+    #    MLP,
+    #    num_modules=3,
+    #    module_kwargs={"layer_sizes": (32, 2*env.action_size)},
+    # )
+    policy_network = NestedLinearPolicy(
+        measurement_networks=[MLP, MLP, MLP, MLP, MLP],
+        measurement_network_kwargs=[
+            {"layer_sizes": (8, 4)},
+            {"layer_sizes": (8, 4)},
+            {"layer_sizes": (16, 8)},
+            {"layer_sizes": (32, 16)},
+            {"layer_sizes": (64, 32)},
+        ],
+        linear_policy_kwargs=[
+            {"features": 4},
+            {"features": 4},
+            {"features": 8},
+            {"features": 16},
+            {"features": 2 * env.action_size},
+        ],
+    )
+
     value_network = MLP(layer_sizes=[256, 256, 256, 256, 256, 1])
 
     network_wrapper = BraxPPONetworksWrapper(
@@ -50,10 +73,10 @@ def train():
         value_network=value_network,
         action_distribution=distribution.NormalTanhDistribution,
     )
-    # print_module_summary(network_wrapper.policy_network, env.observation_size)
+    print_module_summary(network_wrapper.policy_network, env.observation_size)
 
     # Create the PPO agent
-    num_timesteps = 30_000_000
+    num_timesteps = 90_000_000
     eval_every = 500_000
     num_evals = num_timesteps // eval_every
     train_fn = functools.partial(
@@ -72,6 +95,7 @@ def train():
         entropy_cost=1e-3,
         num_envs=2048,
         batch_size=1024,
+        clipping_epsilon=0.3,
         network_factory=network_wrapper.make_ppo_networks,
         seed=0,
     )
@@ -169,4 +193,4 @@ def test():
 
 if __name__ == "__main__":
     train()
-    test()
+    # test()
