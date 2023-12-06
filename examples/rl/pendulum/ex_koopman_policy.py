@@ -16,6 +16,7 @@ from brax.training.acme import running_statistics
 from brax.training.agents.ppo import train as ppo
 from brax.training.agents.ppo.networks import make_inference_fn
 from mujoco import mjx
+from tensorboardX import SummaryWriter
 
 from ambersim.learning.architectures import MLP
 from ambersim.rl.base import MjxEnv, State
@@ -147,7 +148,7 @@ class KoopmanPendulumSwingupEnv(MjxEnv):
 def train_swingup():
     """Train a pendulum swingup agent with custom network architectures."""
     # Choose the dimension of the lifted state for the controller system
-    nz = 50
+    nz = 0
 
     # Initialize the environment
     envs.register_environment("pendulum_swingup", functools.partial(KoopmanPendulumSwingupEnv, nz=nz))
@@ -156,11 +157,12 @@ def train_swingup():
     # Policy network takes as input observations and the current lifted state.
     # It outputs a mean and standard deviation for the action and the next lifted state.
     # N.B. a one layer MLP is just a linear map, so this is a linear policy.
-    policy_network = MLP(layer_sizes=(2 * (env.action_size + nz),))
+    # policy_network = MLP(layer_sizes=(2 * (env.action_size + nz),), bias=False)
+    policy_network = MLP(layer_sizes=(64, 64, 2 * (env.action_size + nz)), bias=False)
 
     # Value network takes as input observations and the current lifted state,
     # and outputs a scalar value.
-    value_network = MLP(layer_sizes=(128, 1))
+    value_network = MLP(layer_sizes=(128, 128, 1))
     network_wrapper = BraxPPONetworksWrapper(
         policy_network=policy_network,
         value_network=value_network,
@@ -191,12 +193,21 @@ def train_swingup():
     )
 
     # Define a callback to log progress
+    log_dir = f"/tmp/mjx_brax_logs/koopman_pendulum_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    print(f"Setting up Tensorboard logging in {log_dir}")
+    writer = SummaryWriter(log_dir)
     times = [datetime.now()]
 
     def progress(num_steps, metrics):
         """Logs progress during RL."""
         print(f"  Steps: {num_steps}, Reward: {metrics['eval/episode_reward']}")
         times.append(datetime.now())
+
+        # Log to tensorboard
+        for key, val in metrics.items():
+            if isinstance(val, jax.Array):
+                val = float(val)
+            writer.add_scalar(key, val, num_steps)
 
     # Do the training
     print("Training...")
