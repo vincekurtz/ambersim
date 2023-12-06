@@ -34,7 +34,7 @@ class KoopmanPendulumSwingupEnv(MjxEnv):
     TODO: make this a wrapper around an existing env.
     """
 
-    def __init__(self, nz=0) -> None:
+    def __init__(self, nz) -> None:
         """Initialize the environment.
 
         Args:
@@ -59,12 +59,17 @@ class KoopmanPendulumSwingupEnv(MjxEnv):
         )
 
         # Store lifting dimension
+        self.z_cost_weight = 1.0
         self.nz = nz
 
     def compute_obs(self, data: mjx.Data, info: Dict[str, Any]) -> jax.Array:
-        """Observes the environment based on the system State. See parent docstring."""
+        """Observes the environment based on the system State.
+
+        This observation includes the current lifted state.
+        """
         theta = data.qpos[0]
         obs = jnp.stack((jnp.cos(theta), jnp.sin(theta), data.qvel[0]))
+        obs = jnp.concatenate((info["z"], obs))
         return obs
 
     def compute_reward(self, data: mjx.Data, info: Dict[str, Any]) -> jax.Array:
@@ -86,7 +91,11 @@ class KoopmanPendulumSwingupEnv(MjxEnv):
         reward_theta_dot = -self.theta_dot_cost_weight * jnp.square(theta_dot).sum()
         reward_tau = -self.control_cost_weight * jnp.square(tau).sum()
 
-        return reward_theta + reward_theta_dot + reward_tau
+        # Add a cost on the norm of the lifted state
+        z = info["z"]
+        reward_z = -self.z_cost_weight * jnp.square(z).sum()
+
+        return reward_theta + reward_theta_dot + reward_tau + reward_z
 
     def reset(self, rng: jax.Array) -> State:
         """Resets the env. See parent docstring."""
@@ -97,11 +106,14 @@ class KoopmanPendulumSwingupEnv(MjxEnv):
         qvel = jax.random.uniform(rng2, (self.sys.nv,), minval=self.qvel_lo, maxval=self.qvel_hi)
         data = self.pipeline_init(qpos, qvel)
 
+        # Lifted state is reset to zero
+        z = jnp.zeros(self.nz)
+
         # other state fields
-        obs = self.compute_obs(data, {})
         reward, done = jnp.zeros(2)
         metrics = {"reward": reward}
-        state_info = {"rng": rng, "step": 0}
+        state_info = {"rng": rng, "step": 0, "z": z}
+        obs = self.compute_obs(data, state_info)
         state = State(data, obs, reward, done, metrics, state_info)
         return state
 
@@ -109,8 +121,17 @@ class KoopmanPendulumSwingupEnv(MjxEnv):
         """Takes a step in the environment. See parent docstring."""
         rng, rng_obs = jax.random.split(state.info["rng"])
 
-        # physics + observation + reward
-        data = self.pipeline_step(state.pipeline_state, action)  # physics
+        # Action is composed of the next lifted state and the control input
+        z_next = action[: self.nz]
+        u = action[self.nz :]
+
+        # Take a physics step
+        data = self.pipeline_step(state.pipeline_state, u)  # physics
+
+        # Step the lifted state
+        state.info["z"] = z_next
+
+        # Observation and reward
         obs = self.compute_obs(data, state.info)  # observation
         reward = self.compute_reward(data, state.info)
         done = 0.0  # pendulum just runs for a fixed number of steps
@@ -125,14 +146,17 @@ class KoopmanPendulumSwingupEnv(MjxEnv):
 
 def train_swingup():
     """Train a pendulum swingup agent with custom network architectures."""
+    # Choose the dimension of the lifted state for the controller system
+    nz = 4
+
     # Initialize the environment
-    envs.register_environment("pendulum_swingup", KoopmanPendulumSwingupEnv)
+    envs.register_environment("pendulum_swingup", functools.partial(KoopmanPendulumSwingupEnv, nz=nz))
     env = envs.get_environment("pendulum_swingup")
 
     # Policy network takes as input observations and the current lifted state.
     # It outputs a mean and standard deviation for the action and the next lifted state.
     # N.B. a one layer MLP is just a linear map, so this is a linear policy.
-    policy_network = MLP(layer_sizes=(2 * env.action_size,))
+    policy_network = MLP(layer_sizes=(2 * (env.action_size + nz),))
 
     # Value network takes as input observations and the current lifted state,
     # and outputs a scalar value.
@@ -142,6 +166,9 @@ def train_swingup():
         value_network=value_network,
         action_distribution=distribution.NormalTanhDistribution,
     )
+    network_factory = functools.partial(
+        network_wrapper.make_ppo_networks, check_sizes=False
+    )  # disable size checks since policy outputs action and next lifted state
 
     train_fn = functools.partial(
         ppo.train,
@@ -159,7 +186,7 @@ def train_swingup():
         entropy_cost=0,
         num_envs=1024,
         batch_size=512,
-        network_factory=network_wrapper.make_ppo_networks,
+        network_factory=network_factory,
         seed=0,
     )
 
