@@ -148,7 +148,7 @@ class KoopmanPendulumSwingupEnv(MjxEnv):
 def train_swingup():
     """Train a pendulum swingup agent with custom network architectures."""
     # Choose the dimension of the lifted state for the controller system
-    nz = 100
+    nz = 10
 
     # Initialize the environment
     envs.register_environment("pendulum_swingup", functools.partial(KoopmanPendulumSwingupEnv, nz=nz))
@@ -235,7 +235,7 @@ def test_trained_swingup_policy():
     # Choose the dimension of the lifted state for the controller system
     # (must match the dimension used during training)
     # TODO: load from saved policy
-    nz = 100
+    nz = 10
     z = jnp.zeros(nz)  # Lifted state
 
     # Initialize the environment
@@ -265,6 +265,7 @@ def test_trained_swingup_policy():
     jit_policy = jax.jit(policy)
 
     print("Simulating...")
+    i = 0
     rng = jax.random.PRNGKey(0)
     with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
         while viewer.is_running():
@@ -290,6 +291,11 @@ def test_trained_swingup_policy():
             dt = float(env.dt)
             if elapsed < dt:
                 time.sleep(dt - elapsed)
+
+            # Reset the lifted state every 200 steps
+            if i % 200 == 0:
+                z = jnp.zeros(nz)
+            i += 1
 
 
 if __name__ == "__main__":
