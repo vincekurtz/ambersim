@@ -329,3 +329,59 @@ class BilinearSystemPolicy(nn.Module):
         log_std_u = jnp.tile(self.log_std_u, zy.shape[:-1] + (1,))
 
         return jnp.concatenate([z_next, u, log_std_z, log_std_u], axis=-1)
+
+
+class LiftedInputLinearSystemPolicy(nn.Module):
+    """A feedback controller that is itself a linear dynamical system with liffed input.
+
+        z_{t+1} = A z_t + phi(y_t)
+        u_t = C z_t + D y_t
+
+    where y_t is the observation, u_t is the action, and z_t is the controller state.
+    The input is lifted by the function phi, which is a neural network. We assume that
+    the z is stored in the env, so this module takes as input [z_t, y_t] and sends as
+    output [z_{t+1}, u_t].
+
+    It also outputs log standard deviations for u_t and z_{t+1}, which are used in PPO.
+
+    Args:
+        nz: Dimension of the controller state.
+        ny: Dimension of the observation.
+        nu: Dimension of the action.
+        phi_kwargs: Keyword arguments for constructing the lifting function (an MLP)
+    """
+
+    nz: int
+    ny: int
+    nu: int
+    phi_kwargs: dict
+
+    def setup(self):
+        """Initialize the network."""
+        # Linear map
+        self.A = self.param("A", nn.initializers.lecun_normal(), (self.nz, self.nz))
+        self.C = self.param("C", nn.initializers.lecun_normal(), (self.nu, self.nz))
+        self.D = self.param("D", nn.initializers.lecun_normal(), (self.nu, self.ny))
+
+        # Lifting function
+        self.phi = MLP(**self.phi_kwargs)
+
+        # Log standard deviations
+        self.log_std_z = self.param("log_std_z", nn.initializers.zeros, (self.nz,))
+        self.log_std_u = self.param("log_std_u", nn.initializers.zeros, (self.nu,))
+
+    def __call__(self, zy: jnp.ndarray):
+        """Forward pass through the network."""
+        # Select z and y from the input (last dimension)
+        z = zy[..., : self.nz]
+        y = zy[..., self.nz :]
+
+        # Controller dynamics
+        z_next = jnp.matmul(z, self.A.T) + self.phi(y)
+        u = jnp.matmul(z, self.C.T) + jnp.matmul(y, self.D.T)
+
+        # Tile log_std to match the dimensions of the input (zy)
+        log_std_z = jnp.tile(self.log_std_z, zy.shape[:-1] + (1,))
+        log_std_u = jnp.tile(self.log_std_u, zy.shape[:-1] + (1,))
+
+        return jnp.concatenate([z_next, u, log_std_z, log_std_u], axis=-1)

@@ -18,7 +18,7 @@ from brax.training.agents.ppo.networks import make_inference_fn
 from mujoco import mjx
 from tensorboardX import SummaryWriter
 
-from ambersim.learning.architectures import MLP, BilinearSystemPolicy, LinearSystemPolicy
+from ambersim.learning.architectures import MLP, BilinearSystemPolicy, LiftedInputLinearSystemPolicy, LinearSystemPolicy
 from ambersim.rl.base import MjxEnv, State
 from ambersim.rl.helpers import BraxPPONetworksWrapper
 from ambersim.utils.io_utils import load_mj_model_from_file
@@ -148,7 +148,7 @@ class KoopmanPendulumSwingupEnv(MjxEnv):
 def train_swingup():
     """Train a pendulum swingup agent with custom network architectures."""
     # Choose the dimension of the lifted state for the controller system
-    nz = 10
+    nz = 0
 
     # Initialize the environment
     envs.register_environment("pendulum_swingup", functools.partial(KoopmanPendulumSwingupEnv, nz=nz))
@@ -160,7 +160,10 @@ def train_swingup():
     # policy_network = MLP(layer_sizes=(2 * (env.action_size + nz),), bias=False)
     # policy_network = MLP(layer_sizes=(64, 64, 2 * (env.action_size + nz)))
 
-    policy_network = BilinearSystemPolicy(nz=nz, ny=3, nu=1)
+    # policy_network = BilinearSystemPolicy(nz=nz, ny=3, nu=1)
+    # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=3, nu=1,
+    #                                               phi_kwargs={"layer_sizes": (16, 16, nz)})
+    policy_network = MLP(layer_sizes=(16, 16, 2 * (env.action_size)))
 
     # Value network takes as input observations and the current lifted state,
     # and outputs a scalar value.
@@ -176,8 +179,8 @@ def train_swingup():
 
     train_fn = functools.partial(
         ppo.train,
-        num_timesteps=500_000_000,
-        num_evals=500,
+        num_timesteps=1_000_000,
+        num_evals=50,
         reward_scaling=0.1,
         episode_length=200,
         normalize_observations=False,
@@ -187,7 +190,7 @@ def train_swingup():
         num_updates_per_batch=8,
         discounting=0.97,
         learning_rate=3e-4,
-        entropy_cost=0,
+        entropy_cost=1e-4,
         num_envs=1024,
         batch_size=512,
         network_factory=network_factory,
@@ -235,7 +238,7 @@ def test_trained_swingup_policy():
     # Choose the dimension of the lifted state for the controller system
     # (must match the dimension used during training)
     # TODO: load from saved policy
-    nz = 10
+    nz = 0
     z = jnp.zeros(nz)  # Lifted state
 
     # Initialize the environment
