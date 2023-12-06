@@ -229,3 +229,44 @@ class NestedLinearPolicy(nn.Module):
             y = self.linear_policies[i](jnp.concatenate([measurements[i], y], axis=-1))
 
         return y
+
+
+class LinearSystemPolicy(nn.Module):
+    """A feedback controller that is itself a linear dynamical system.
+
+        z_{t+1} = A z_t + B y_t
+        u_t = C z_t + D y_t
+
+    where y_t is the observation, u_t is the action, and z_t is the controller state.
+    We assume that the z is stored in the env, so this module takes as input [z_t, y_t]
+    and sends as output [z_{t+1}, u_t].
+
+    It also outputs log standard deviations for u_t and z_{t+1}, which are used in PPO.
+
+    Args:
+        nz: Dimension of the controller state.
+        ny: Dimension of the observation.
+        nu: Dimension of the action.
+    """
+
+    nz: int
+    ny: int
+    nu: int
+
+    def setup(self):
+        """Initialize the network."""
+        self.A = self.param("A", nn.initializers.zeros, (self.nz, self.nz))
+        self.B = self.param("B", nn.initializers.zeros, (self.nz, self.ny))
+        self.C = self.param("C", nn.initializers.zeros, (self.nu, self.nz))
+        self.D = self.param("D", nn.initializers.zeros, (self.nu, self.ny))
+
+        self.log_std_z = self.param("log_std_z", nn.initializers.zeros, (self.nz,))
+        self.log_std_u = self.param("log_std_u", nn.initializers.zeros, (self.nu,))
+
+    def __call__(self, zy: jnp.ndarray):
+        """Forward pass through the network."""
+        z = zy[: self.nz]
+        y = zy[self.nz :]
+        z_next = jnp.matmul(self.A, z) + jnp.matmul(self.B, y)
+        u = jnp.matmul(self.C, z) + jnp.matmul(self.D, y)
+        return jnp.concatenate([z_next, u, self.log_std_z, self.log_std_u], axis=-1)

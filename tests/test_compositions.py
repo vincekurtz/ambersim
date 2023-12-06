@@ -4,6 +4,7 @@ import jax.numpy as jp
 from ambersim.learning.architectures import (
     MLP,
     HierarchyComposition,
+    LinearSystemPolicy,
     NestedLinearPolicy,
     ParallelComposition,
     SeriesComposition,
@@ -113,8 +114,34 @@ def test_nested_linear():
     assert my_output.shape[-1] == output_size[-1]
 
 
+def test_linear_system_policy():
+    """Test creating and evaluating a linear system policy."""
+    nz = 4
+    ny = 3
+    nu = 2
+
+    net = LinearSystemPolicy(nz, ny, nu)
+    dummy_input = jp.ones((nz + ny,))  # input is lifted state + observation
+    params = net.init(jax.random.PRNGKey(0), dummy_input)
+
+    assert params["params"]["A"].shape == (nz, nz)
+    assert params["params"]["B"].shape == (nz, ny)
+    assert params["params"]["C"].shape == (nu, nz)
+    assert params["params"]["D"].shape == (nu, ny)
+
+    # Print the network summary
+    print_module_summary(net, dummy_input.shape)
+
+    # Forward pass through the network
+    my_input = jax.random.normal(jax.random.PRNGKey(0), dummy_input.shape)
+    my_output = net.apply(params, my_input)
+
+    assert my_output.shape == (2 * (nz + nu),)
+
+
 if __name__ == "__main__":
-    test_series()
-    test_parallel()
-    test_hierarchy()
-    test_nested_linear()
+    # test_series()
+    # test_parallel()
+    # test_hierarchy()
+    # test_nested_linear()
+    test_linear_system_policy()
