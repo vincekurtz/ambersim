@@ -59,7 +59,7 @@ class KoopmanPendulumSwingupEnv(MjxEnv):
         )
 
         # Store lifting dimension
-        self.z_cost_weight = 1.0
+        self.z_cost_weight = 0.0001
         self.nz = nz
 
     def compute_obs(self, data: mjx.Data, info: Dict[str, Any]) -> jax.Array:
@@ -147,7 +147,7 @@ class KoopmanPendulumSwingupEnv(MjxEnv):
 def train_swingup():
     """Train a pendulum swingup agent with custom network architectures."""
     # Choose the dimension of the lifted state for the controller system
-    nz = 4
+    nz = 10
 
     # Initialize the environment
     envs.register_environment("pendulum_swingup", functools.partial(KoopmanPendulumSwingupEnv, nz=nz))
@@ -219,11 +219,18 @@ def train_swingup():
 
 def test_trained_swingup_policy():
     """Load a trained policy and run an interactive simulation."""
-    envs.register_environment("pendulum_swingup", KoopmanPendulumSwingupEnv)
+    # Choose the dimension of the lifted state for the controller system
+    # (must match the dimension used during training)
+    # TODO: load from saved policy
+    nz = 10
+    z = jnp.zeros(nz)  # Lifted state
+
+    # Initialize the environment
+    envs.register_environment("pendulum_swingup", functools.partial(KoopmanPendulumSwingupEnv, nz=nz))
     env = envs.get_environment("pendulum_swingup")
     mj_model = env.model
     mj_data = mujoco.MjData(mj_model)
-    obs = env.compute_obs(mjx.device_put(mj_data), {})
+    obs = env.compute_obs(mjx.device_put(mj_data), {"z": z})
 
     print("Loading trained policy...")
     params_path = "/tmp/pendulum_params.pkl"
@@ -237,6 +244,7 @@ def test_trained_swingup_policy():
         observation_size=env.observation_size,
         action_size=env.action_size,
         preprocess_observations_fn=running_statistics.normalize,
+        check_sizes=False,  # disable size checks since policy outputs action and next lifted state
     )
 
     make_policy = make_inference_fn(ppo_networks)
@@ -250,17 +258,19 @@ def test_trained_swingup_policy():
             start_time = time.time()
             act_rng, rng = jax.random.split(rng)
 
+            print("|z|: ", jnp.linalg.norm(z))
+
             # Apply the policy
             act, _ = jit_policy(obs, act_rng)
-            mj_data.ctrl[:] = act
-            obs = env.compute_obs(mjx.device_put(mj_data), {})
+            z = act[env.action_size :]  # Lifted state
+            u = act[: env.action_size]  # Control input
+            mj_data.ctrl[:] = u
+            obs = env.compute_obs(mjx.device_put(mj_data), {"z": z})
 
             # Step the simulation
             for _ in range(env._physics_steps_per_control_step):
                 mujoco.mj_step(mj_model, mj_data)
                 viewer.sync()
-
-            # TODO: step the MJX env too so the lifted state is updated
 
             # Try to run in roughly realtime
             elapsed = time.time() - start_time
