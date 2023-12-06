@@ -174,7 +174,8 @@ def train_swingup():
 
     train_fn = functools.partial(
         ppo.train,
-        num_timesteps=1_000_000_000,
+        # num_timesteps=1_000_000_000,
+        num_timesteps=1_000_000,
         num_evals=500,
         reward_scaling=0.1,
         episode_length=200,
@@ -233,7 +234,7 @@ def test_trained_swingup_policy():
     # Choose the dimension of the lifted state for the controller system
     # (must match the dimension used during training)
     # TODO: load from saved policy
-    nz = 10
+    nz = 0
     z = jnp.zeros(nz)  # Lifted state
 
     # Initialize the environment
