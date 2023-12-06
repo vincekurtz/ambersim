@@ -279,3 +279,53 @@ class LinearSystemPolicy(nn.Module):
         log_std_u = jnp.tile(self.log_std_u, zy.shape[:-1] + (1,))
 
         return jnp.concatenate([z_next, u, log_std_z, log_std_u], axis=-1)
+
+
+class BilinearSystemPolicy(nn.Module):
+    """A feedback controller that is itself a bilinear dynamical system.
+
+        z_{t+1} = A z_t + ∑ᵢ B[i] z_t y_t[i]
+        u_t = C z_t + D y_t
+
+    where y_t is the observation, u_t is the action, and z_t is the controller state.
+    We assume that the z is stored in the env, so this module takes as input [z_t, y_t]
+    and sends as output [z_{t+1}, u_t].
+
+    It also outputs log standard deviations for u_t and z_{t+1}, which are used in PPO.
+
+    Args:
+        nz: Dimension of the controller state.
+        ny: Dimension of the observation.
+        nu: Dimension of the action.
+    """
+
+    nz: int
+    ny: int
+    nu: int
+
+    def setup(self):
+        """Initialize the network."""
+        self.A = self.param("A", nn.initializers.lecun_normal(), (self.nz, self.nz))
+        self.B = self.param("B", nn.initializers.lecun_normal(), (self.nz, self.nz, self.ny))
+        self.C = self.param("C", nn.initializers.lecun_normal(), (self.nu, self.nz))
+        self.D = self.param("D", nn.initializers.lecun_normal(), (self.nu, self.ny))
+
+        self.log_std_z = self.param("log_std_z", nn.initializers.zeros, (self.nz,))
+        self.log_std_u = self.param("log_std_u", nn.initializers.zeros, (self.nu,))
+
+    def __call__(self, zy: jnp.ndarray):
+        """Forward pass through the network."""
+        # Select z and y from the input (last dimension)
+        z = zy[..., : self.nz]
+        y = zy[..., self.nz :]
+
+        # System dynamics
+        Bzy = jnp.einsum("ijk,...j,...k->...i", self.B, z, y)
+        z_next = jnp.matmul(z, self.A.T) + Bzy
+        u = jnp.matmul(z, self.C.T) + jnp.matmul(y, self.D.T)
+
+        # Tile log_std to match the dimensions of the input (zy)
+        log_std_z = jnp.tile(self.log_std_z, zy.shape[:-1] + (1,))
+        log_std_u = jnp.tile(self.log_std_u, zy.shape[:-1] + (1,))
+
+        return jnp.concatenate([z_next, u, log_std_z, log_std_u], axis=-1)
