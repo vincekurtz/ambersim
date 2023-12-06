@@ -18,7 +18,7 @@ from brax.training.agents.ppo.networks import make_inference_fn
 from mujoco import mjx
 from tensorboardX import SummaryWriter
 
-from ambersim.learning.architectures import MLP
+from ambersim.learning.architectures import MLP, LinearSystemPolicy
 from ambersim.rl.base import MjxEnv, State
 from ambersim.rl.helpers import BraxPPONetworksWrapper
 from ambersim.utils.io_utils import load_mj_model_from_file
@@ -148,7 +148,7 @@ class KoopmanPendulumSwingupEnv(MjxEnv):
 def train_swingup():
     """Train a pendulum swingup agent with custom network architectures."""
     # Choose the dimension of the lifted state for the controller system
-    nz = 0
+    nz = 4
 
     # Initialize the environment
     envs.register_environment("pendulum_swingup", functools.partial(KoopmanPendulumSwingupEnv, nz=nz))
@@ -158,7 +158,9 @@ def train_swingup():
     # It outputs a mean and standard deviation for the action and the next lifted state.
     # N.B. a one layer MLP is just a linear map, so this is a linear policy.
     # policy_network = MLP(layer_sizes=(2 * (env.action_size + nz),), bias=False)
-    policy_network = MLP(layer_sizes=(64, 64, 2 * (env.action_size + nz)), bias=False)
+    # policy_network = MLP(layer_sizes=(64, 64, 2 * (env.action_size + nz)))
+
+    policy_network = LinearSystemPolicy(nz=nz, ny=3, nu=1)
 
     # Value network takes as input observations and the current lifted state,
     # and outputs a scalar value.
@@ -179,7 +181,7 @@ def train_swingup():
         num_evals=500,
         reward_scaling=0.1,
         episode_length=200,
-        normalize_observations=True,
+        normalize_observations=False,
         action_repeat=1,
         unroll_length=10,
         num_minibatches=32,

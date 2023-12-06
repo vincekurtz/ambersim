@@ -3,6 +3,7 @@ from typing import Sequence
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+from jax import lax
 
 
 def print_module_summary(module: nn.Module, input_shape: Sequence[int]):
@@ -255,18 +256,26 @@ class LinearSystemPolicy(nn.Module):
 
     def setup(self):
         """Initialize the network."""
-        self.A = self.param("A", nn.initializers.zeros, (self.nz, self.nz))
-        self.B = self.param("B", nn.initializers.zeros, (self.nz, self.ny))
-        self.C = self.param("C", nn.initializers.zeros, (self.nu, self.nz))
-        self.D = self.param("D", nn.initializers.zeros, (self.nu, self.ny))
+        self.A = self.param("A", nn.initializers.lecun_normal(), (self.nz, self.nz))
+        self.B = self.param("B", nn.initializers.lecun_normal(), (self.nz, self.ny))
+        self.C = self.param("C", nn.initializers.lecun_normal(), (self.nu, self.nz))
+        self.D = self.param("D", nn.initializers.lecun_normal(), (self.nu, self.ny))
 
         self.log_std_z = self.param("log_std_z", nn.initializers.zeros, (self.nz,))
         self.log_std_u = self.param("log_std_u", nn.initializers.zeros, (self.nu,))
 
     def __call__(self, zy: jnp.ndarray):
         """Forward pass through the network."""
-        z = zy[: self.nz]
-        y = zy[self.nz :]
-        z_next = jnp.matmul(self.A, z) + jnp.matmul(self.B, y)
-        u = jnp.matmul(self.C, z) + jnp.matmul(self.D, y)
-        return jnp.concatenate([z_next, u, self.log_std_z, self.log_std_u], axis=-1)
+        # Select z and y from the input (last dimension)
+        z = zy[..., : self.nz]
+        y = zy[..., self.nz :]
+
+        # Linear map: note that the last dim holds our data so we transpose
+        z_next = jnp.matmul(z, self.A.T) + jnp.matmul(y, self.B.T)
+        u = jnp.matmul(z, self.C.T) + jnp.matmul(y, self.D.T)
+
+        # Tile log_std to match the dimensions of the input (zy)
+        log_std_z = jnp.tile(self.log_std_z, zy.shape[:-1] + (1,))
+        log_std_u = jnp.tile(self.log_std_u, zy.shape[:-1] + (1,))
+
+        return jnp.concatenate([z_next, u, log_std_z, log_std_u], axis=-1)
