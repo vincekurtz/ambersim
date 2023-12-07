@@ -156,13 +156,10 @@ def train_swingup():
 
     # Policy network takes as input observations and the current lifted state.
     # It outputs a mean and standard deviation for the action and the next lifted state.
-    # N.B. a one layer MLP is just a linear map, so this is a linear policy.
-    # policy_network = MLP(layer_sizes=(2 * (env.action_size + nz),), bias=False)
-    policy_network = MLP(layer_sizes=(64, 64, 2 * (env.action_size + nz)))
 
     # policy_network = LinearSystemPolicy(nz=nz, ny=3, nu=1)
     # policy_network = BilinearSystemPolicy(nz=nz, ny=3, nu=1)
-    # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=3, nu=1, phi_kwargs={"layer_sizes": (16, 16, nz)})
+    policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=3, nu=1, phi_kwargs={"layer_sizes": (16, 16, nz)})
     # policy_network = MLP(layer_sizes=(16, 16, 2 * (env.action_size)))
 
     # Value network takes as input observations and the current lifted state,
@@ -267,8 +264,11 @@ def test_trained_swingup_policy():
     policy = make_policy(params, deterministic=True)
     jit_policy = jax.jit(policy)
 
-    print("Simulating...")
+    # Flag for resetting the lifted state periodically
+    do_resets = False
     i = 0
+
+    print("Simulating...")
     rng = jax.random.PRNGKey(0)
     with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
         while viewer.is_running():
@@ -296,10 +296,11 @@ def test_trained_swingup_policy():
                 time.sleep(dt - elapsed)
 
             # Reset the lifted state every 200 steps
-            if i % 200 == 0:
-                print("********* RESET *********")
-                z = jnp.zeros(nz)
-            i += 1
+            if do_resets:
+                if i % 200 == 0:
+                    print("********* RESET *********")
+                    z = jnp.zeros(nz)
+                i += 1
 
 
 if __name__ == "__main__":
