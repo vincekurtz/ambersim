@@ -158,11 +158,11 @@ def train_swingup():
     # It outputs a mean and standard deviation for the action and the next lifted state.
     # N.B. a one layer MLP is just a linear map, so this is a linear policy.
     # policy_network = MLP(layer_sizes=(2 * (env.action_size + nz),), bias=False)
-    # policy_network = MLP(layer_sizes=(64, 64, 2 * (env.action_size + nz)))
+    policy_network = MLP(layer_sizes=(64, 64, 2 * (env.action_size + nz)))
 
     # policy_network = LinearSystemPolicy(nz=nz, ny=3, nu=1)
     # policy_network = BilinearSystemPolicy(nz=nz, ny=3, nu=1)
-    policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=3, nu=1, phi_kwargs={"layer_sizes": (16, 16, nz)})
+    # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=3, nu=1, phi_kwargs={"layer_sizes": (16, 16, nz)})
     # policy_network = MLP(layer_sizes=(16, 16, 2 * (env.action_size)))
 
     # Value network takes as input observations and the current lifted state,
