@@ -279,8 +279,8 @@ def test_trained_swingup_policy():
 
             # Apply the policy
             act, _ = jit_policy(obs, act_rng)
-            z = act[env.action_size :]  # Lifted state
-            u = act[: env.action_size]  # Control input
+            z = act[:nz]  # Lifted state
+            u = act[nz:]  # Control input
             mj_data.ctrl[:] = u
             obs = env.compute_obs(mjx.device_put(mj_data), {"z": z})
 
