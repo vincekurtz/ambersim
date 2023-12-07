@@ -148,7 +148,7 @@ class KoopmanPendulumSwingupEnv(MjxEnv):
 def train_swingup():
     """Train a pendulum swingup agent with custom network architectures."""
     # Choose the dimension of the lifted state for the controller system
-    nz = 0
+    nz = 10
 
     # Initialize the environment
     envs.register_environment("pendulum_swingup", functools.partial(KoopmanPendulumSwingupEnv, nz=nz))
@@ -160,10 +160,10 @@ def train_swingup():
     # policy_network = MLP(layer_sizes=(2 * (env.action_size + nz),), bias=False)
     # policy_network = MLP(layer_sizes=(64, 64, 2 * (env.action_size + nz)))
 
+    # policy_network = LinearSystemPolicy(nz=nz, ny=3, nu=1)
     # policy_network = BilinearSystemPolicy(nz=nz, ny=3, nu=1)
-    # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=3, nu=1,
-    #                                               phi_kwargs={"layer_sizes": (16, 16, nz)})
-    policy_network = MLP(layer_sizes=(16, 16, 2 * (env.action_size)))
+    policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=3, nu=1, phi_kwargs={"layer_sizes": (16, 16, nz)})
+    # policy_network = MLP(layer_sizes=(16, 16, 2 * (env.action_size)))
 
     # Value network takes as input observations and the current lifted state,
     # and outputs a scalar value.
@@ -179,8 +179,8 @@ def train_swingup():
 
     train_fn = functools.partial(
         ppo.train,
-        num_timesteps=1_000_000,
-        num_evals=50,
+        num_timesteps=50_000_000,
+        num_evals=250,
         reward_scaling=0.1,
         episode_length=200,
         normalize_observations=False,
@@ -238,7 +238,7 @@ def test_trained_swingup_policy():
     # Choose the dimension of the lifted state for the controller system
     # (must match the dimension used during training)
     # TODO: load from saved policy
-    nz = 0
+    nz = 10
     z = jnp.zeros(nz)  # Lifted state
 
     # Initialize the environment
@@ -297,6 +297,7 @@ def test_trained_swingup_policy():
 
             # Reset the lifted state every 200 steps
             if i % 200 == 0:
+                print("********* RESET *********")
                 z = jnp.zeros(nz)
             i += 1
 
