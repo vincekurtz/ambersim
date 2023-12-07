@@ -259,7 +259,7 @@ def test_trained_swingup_policy():
     ppo_networks = network_wrapper.make_ppo_networks(
         observation_size=env.observation_size,
         action_size=env.action_size,
-        preprocess_observations_fn=running_statistics.normalize,
+        # preprocess_observations_fn=running_statistics.normalize,
         check_sizes=False,  # disable size checks since policy outputs action and next lifted state
     )
 
