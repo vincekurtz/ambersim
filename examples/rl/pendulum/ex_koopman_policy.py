@@ -9,6 +9,7 @@ import jax
 import jax.numpy as jnp
 import mujoco
 import mujoco.viewer
+import numpy as np
 from brax import envs
 from brax.io import model
 from brax.training import distribution
@@ -18,7 +19,7 @@ from brax.training.agents.ppo.networks import make_inference_fn
 from mujoco import mjx
 from tensorboardX import SummaryWriter
 
-from ambersim.learning.architectures import MLP, BilinearSystemPolicy, LiftedInputLinearSystemPolicy, LinearSystemPolicy
+from ambersim.learning.architectures import MLP, LinearSystemPolicy
 from ambersim.rl.base import MjxEnv, State
 from ambersim.rl.helpers import BraxPPONetworksWrapper
 from ambersim.utils.io_utils import load_mj_model_from_file
@@ -154,13 +155,10 @@ def train_swingup():
     envs.register_environment("pendulum_swingup", functools.partial(KoopmanPendulumSwingupEnv, nz=nz))
     env = envs.get_environment("pendulum_swingup")
 
-    # Policy network takes as input observations and the current lifted state.
-    # It outputs a mean and standard deviation for the action and the next lifted state.
-
+    # Policy network takes as input [z, y]: the current lifted state and observations.
+    # It outputs [z_next, u, σ(z_next), σ(u)]: the next lifted state, control input,
+    # and their standard deviations.
     policy_network = LinearSystemPolicy(nz=nz, ny=3, nu=1)
-    # policy_network = BilinearSystemPolicy(nz=nz, ny=3, nu=1)
-    # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=3, nu=1, phi_kwargs={"layer_sizes": (16, 16, nz)})
-    # policy_network = MLP(layer_sizes=(16, 16, 2 * (env.action_size)))
 
     # Value network takes as input observations and the current lifted state,
     # and outputs a scalar value.
@@ -172,7 +170,7 @@ def train_swingup():
     )
     network_factory = functools.partial(
         network_wrapper.make_ppo_networks, check_sizes=False
-    )  # disable size checks since policy outputs action and next lifted state
+    )  # disable size checks since policy outputs both action and next lifted state
 
     train_fn = functools.partial(
         ppo.train,
@@ -180,7 +178,7 @@ def train_swingup():
         num_evals=250,
         reward_scaling=0.1,
         episode_length=200,
-        normalize_observations=True,
+        normalize_observations=False,
         action_repeat=1,
         unroll_length=10,
         num_minibatches=32,
@@ -213,7 +211,7 @@ def train_swingup():
 
     # Do the training
     print("Training...")
-    make_inference_fn, params, _ = train_fn(
+    _, params, _ = train_fn(
         environment=env,
         progress_fn=progress,
     )
@@ -252,15 +250,21 @@ def test_trained_swingup_policy():
     obs = env.compute_obs(mjx.device_put(mj_data), {"z": z})
 
     # Create the policy function
-    ppo_networks = network_wrapper.make_ppo_networks(
-        observation_size=env.observation_size,
-        action_size=env.action_size,
-        preprocess_observations_fn=running_statistics.normalize,
-        check_sizes=False,  # disable size checks since policy outputs action and next lifted state
-    )
-    make_policy = make_inference_fn(ppo_networks)
-    policy = make_policy(params, deterministic=True)
-    jit_policy = jax.jit(policy)
+    # ppo_networks = network_wrapper.make_ppo_networks(
+    #     observation_size=env.observation_size,
+    #     action_size=env.action_size,
+    #     # preprocess_observations_fn=running_statistics.normalize,
+    #     check_sizes=False,  # disable size checks since policy outputs action and next lifted state
+    # )
+    # make_policy = make_inference_fn(ppo_networks)
+    # policy = make_policy(params, deterministic=True)
+    # jit_policy = jax.jit(policy)
+
+    # Sanity check: manually implementing the policy with ABCD matrices
+    A = np.asarray(params[1]["params"]["A"])
+    B = np.asarray(params[1]["params"]["B"])
+    C = np.asarray(params[1]["params"]["C"])
+    D = np.asarray(params[1]["params"]["D"])
 
     # Flag for resetting the lifted state periodically
     do_resets = False
@@ -276,9 +280,14 @@ def test_trained_swingup_policy():
             print("|z|: ", jnp.linalg.norm(z))
 
             # Apply the policy
-            act, _ = jit_policy(obs, act_rng)
-            z = act[:nz]  # Lifted state
-            u = act[nz:]  # Control input
+            y = obs[nz:]
+            u = np.tanh(C @ z + D @ y)
+            z = np.tanh(A @ z + B @ y)
+
+            # act, _ = jit_policy(obs, act_rng)
+            # z = act[:nz]  # Lifted state
+            # u = act[nz:]  # Control input
+
             mj_data.ctrl[:] = u
             obs = env.compute_obs(mjx.device_put(mj_data), {"z": z})
 
