@@ -242,6 +242,9 @@ class LinearSystemPolicy(nn.Module):
     We assume that the z is stored in the env, so this module takes as input [z_t, y_t]
     and sends as output [z_{t+1}, u_t].
 
+    Note that A = diag(tanh(L)) is a diagonal matrix with elements in [-1, 1],
+    so that z_{t+1} = A z_t is stable. B, C, and D are all dense matrices.
+
     It also outputs log standard deviations for u_t and z_{t+1}, which are used in PPO.
 
     Args:
@@ -256,7 +259,7 @@ class LinearSystemPolicy(nn.Module):
 
     def setup(self):
         """Initialize the network."""
-        self.A = jnp.diag(self.param("A", nn.initializers.lecun_normal(), (self.nz, 1))[:, 0])
+        self.L = self.param("L", nn.initializers.zeros, (self.nz,))
         self.B = self.param("B", nn.initializers.lecun_normal(), (self.nz, self.ny))
         self.C = self.param("C", nn.initializers.lecun_normal(), (self.nu, self.nz))
         self.D = self.param("D", nn.initializers.lecun_normal(), (self.nu, self.ny))
@@ -271,8 +274,8 @@ class LinearSystemPolicy(nn.Module):
         y = zy[..., self.nz :]
 
         # Linear map: note that the last dim holds our data so we transpose
-        z_next = jnp.matmul(z, jnp.tanh(self.A.T)) + jnp.matmul(y, self.B.T)
-        u = jnp.tanh(jnp.matmul(z, self.C.T) + jnp.matmul(y, self.D.T))
+        z_next = z * jnp.tanh(self.L) + jnp.matmul(y, self.B.T)
+        u = jnp.matmul(z, self.C.T) + jnp.matmul(y, self.D.T)
 
         # Tile log_std to match the dimensions of the input (zy)
         log_std_z = jnp.tile(self.log_std_z, zy.shape[:-1] + (1,))

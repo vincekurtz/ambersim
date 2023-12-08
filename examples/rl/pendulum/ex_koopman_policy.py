@@ -310,7 +310,7 @@ def test_trained_swingup_policy():
 
     if manual_policy:
         # Sanity check: manually implementing the policy with ABCD matrices
-        A = np.diag(np.asarray(params[1]["params"]["A"])[:, 0])
+        A = np.diag(np.tanh(np.asarray(params[1]["params"]["L"])))
         B = np.asarray(params[1]["params"]["B"])
         C = np.asarray(params[1]["params"]["C"])
         D = np.asarray(params[1]["params"]["D"])
@@ -331,8 +331,8 @@ def test_trained_swingup_policy():
             # Apply the policy
             if manual_policy:
                 y = obs[nz:]
-                u = np.tanh(C @ z + D @ y)
-                z = np.tanh(A) @ z + B @ y
+                u = C @ z + D @ y
+                z = A @ z + B @ y
             else:
                 act, _ = jit_policy(obs, act_rng)
                 z = act[:nz]  # Lifted state
