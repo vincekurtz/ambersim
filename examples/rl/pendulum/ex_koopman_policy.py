@@ -146,6 +146,51 @@ class KoopmanPendulumSwingupEnv(MjxEnv):
         return state
 
 
+class IdentityBijector:
+    """Identity postprocessing function for use with brax's ParametricDistribution."""
+
+    def forward(self, x):
+        """Identity function."""
+        return x
+
+    def inverse(self, x):
+        """Inverse of identity is identity."""
+        return x
+
+    def forward_log_det_jacobian(self, x):
+        """Log det jacobian of identity is zero."""
+        return 0.0
+
+
+class NormalDistribution(distribution.ParametricDistribution):
+    """A simple normal distribution.
+
+    Based on distribution.NormalTanhDistribution, but without the extra tanh that
+    bounds the mean between [-1,1].
+    """
+
+    def __init__(self, event_size, min_std=1e-3):
+        """Initialize the distirbution.
+
+        Args:
+            event_size: the dimension of the distribution.
+            min_std: the minimum standard deviation.
+        """
+        super().__init__(
+            param_size=2 * event_size,  # mean and diagonal covariance
+            postprocessor=IdentityBijector(),
+            event_ndims=1,
+            reparametrizable=True,
+        )
+        self._min_std = min_std
+
+    def create_dist(self, parameters):
+        """Create a distribution from parameters."""
+        mean, raw_std = jnp.split(parameters, 2, axis=-1)
+        std = jax.nn.softplus(raw_std) + self._min_std
+        return distribution.NormalDistribution(loc=mean, scale=std)
+
+
 def train_swingup():
     """Train a pendulum swingup agent with custom network architectures."""
     # Choose the dimension of the lifted state for the controller system
@@ -166,7 +211,8 @@ def train_swingup():
     network_wrapper = BraxPPONetworksWrapper(
         policy_network=policy_network,
         value_network=value_network,
-        action_distribution=distribution.NormalTanhDistribution,
+        # action_distribution=distribution.NormalTanhDistribution,
+        action_distribution=NormalDistribution,
     )
     network_factory = functools.partial(
         network_wrapper.make_ppo_networks, check_sizes=False
@@ -250,21 +296,24 @@ def test_trained_swingup_policy():
     obs = env.compute_obs(mjx.device_put(mj_data), {"z": z})
 
     # Create the policy function
-    # ppo_networks = network_wrapper.make_ppo_networks(
-    #     observation_size=env.observation_size,
-    #     action_size=env.action_size,
-    #     # preprocess_observations_fn=running_statistics.normalize,
-    #     check_sizes=False,  # disable size checks since policy outputs action and next lifted state
-    # )
-    # make_policy = make_inference_fn(ppo_networks)
-    # policy = make_policy(params, deterministic=True)
-    # jit_policy = jax.jit(policy)
+    manual_policy = True
+    if not manual_policy:
+        ppo_networks = network_wrapper.make_ppo_networks(
+            observation_size=env.observation_size,
+            action_size=env.action_size,
+            # preprocess_observations_fn=running_statistics.normalize,
+            check_sizes=False,  # disable size checks since policy outputs action and next lifted state
+        )
+        make_policy = make_inference_fn(ppo_networks)
+        policy = make_policy(params, deterministic=True)
+        jit_policy = jax.jit(policy)
 
-    # Sanity check: manually implementing the policy with ABCD matrices
-    A = np.asarray(params[1]["params"]["A"])
-    B = np.asarray(params[1]["params"]["B"])
-    C = np.asarray(params[1]["params"]["C"])
-    D = np.asarray(params[1]["params"]["D"])
+    if manual_policy:
+        # Sanity check: manually implementing the policy with ABCD matrices
+        A = np.asarray(params[1]["params"]["A"])
+        B = np.asarray(params[1]["params"]["B"])
+        C = np.asarray(params[1]["params"]["C"])
+        D = np.asarray(params[1]["params"]["D"])
 
     # Flag for resetting the lifted state periodically
     do_resets = False
@@ -280,13 +329,14 @@ def test_trained_swingup_policy():
             print("|z|: ", jnp.linalg.norm(z))
 
             # Apply the policy
-            y = obs[nz:]
-            u = np.tanh(C @ z + D @ y)
-            z = np.tanh(A @ z + B @ y)
-
-            # act, _ = jit_policy(obs, act_rng)
-            # z = act[:nz]  # Lifted state
-            # u = act[nz:]  # Control input
+            if manual_policy:
+                y = obs[nz:]
+                u = np.tanh(C @ z + D @ y)
+                z = np.tanh(A @ z + B @ y)
+            else:
+                act, _ = jit_policy(obs, act_rng)
+                z = act[:nz]  # Lifted state
+                u = act[nz:]  # Control input
 
             mj_data.ctrl[:] = u
             obs = env.compute_obs(mjx.device_put(mj_data), {"z": z})

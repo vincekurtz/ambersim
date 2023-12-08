@@ -271,8 +271,8 @@ class LinearSystemPolicy(nn.Module):
         y = zy[..., self.nz :]
 
         # Linear map: note that the last dim holds our data so we transpose
-        z_next = jnp.matmul(z, self.A.T) + jnp.matmul(y, self.B.T)
-        u = jnp.matmul(z, self.C.T) + jnp.matmul(y, self.D.T)
+        z_next = jnp.tanh(jnp.matmul(z, self.A.T) + jnp.matmul(y, self.B.T))
+        u = jnp.tanh(jnp.matmul(z, self.C.T) + jnp.matmul(y, self.D.T))
 
         # Tile log_std to match the dimensions of the input (zy)
         log_std_z = jnp.tile(self.log_std_z, zy.shape[:-1] + (1,))
