@@ -148,7 +148,7 @@ class KoopmanPendulumSwingupEnv(MjxEnv):
 def train_swingup():
     """Train a pendulum swingup agent with custom network architectures."""
     # Choose the dimension of the lifted state for the controller system
-    nz = 10
+    nz = 24
 
     # Initialize the environment
     envs.register_environment("pendulum_swingup", functools.partial(KoopmanPendulumSwingupEnv, nz=nz))
@@ -232,11 +232,17 @@ def train_swingup():
 
 def test_trained_swingup_policy():
     """Load a trained policy and run an interactive simulation."""
-    # Choose the dimension of the lifted state for the controller system
-    # (must match the dimension used during training)
-    # TODO: load from saved policy
-    nz = 10
-    z = jnp.zeros(nz)  # Lifted state
+    # Load the trained policy
+    print("Loading trained policy...")
+    params_path = "/tmp/pendulum_params.pkl"
+    networks_path = "/tmp/pendulum_networks.pkl"
+    params = model.load_params(params_path)
+    with open(networks_path, "rb") as f:
+        network_wrapper = pickle.load(f)
+
+    # Create a lifted state for the controller
+    nz = network_wrapper.policy_network.nz
+    z = jnp.zeros(nz)
 
     # Initialize the environment
     envs.register_environment("pendulum_swingup", functools.partial(KoopmanPendulumSwingupEnv, nz=nz))
@@ -245,21 +251,13 @@ def test_trained_swingup_policy():
     mj_data = mujoco.MjData(mj_model)
     obs = env.compute_obs(mjx.device_put(mj_data), {"z": z})
 
-    print("Loading trained policy...")
-    params_path = "/tmp/pendulum_params.pkl"
-    networks_path = "/tmp/pendulum_networks.pkl"
-    params = model.load_params(params_path)
-    with open(networks_path, "rb") as f:
-        network_wrapper = pickle.load(f)
-
-    # Create the policy
+    # Create the policy function
     ppo_networks = network_wrapper.make_ppo_networks(
         observation_size=env.observation_size,
         action_size=env.action_size,
         # preprocess_observations_fn=running_statistics.normalize,
         check_sizes=False,  # disable size checks since policy outputs action and next lifted state
     )
-
     make_policy = make_inference_fn(ppo_networks)
     policy = make_policy(params, deterministic=True)
     jit_policy = jax.jit(policy)
