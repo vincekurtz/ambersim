@@ -332,7 +332,7 @@ def test_trained_swingup_policy():
             if manual_policy:
                 y = obs[nz:]
                 u = np.tanh(C @ z + D @ y)
-                z = np.tanh(A @ z + B @ y)
+                z = np.tanh(A) @ z + B @ y
             else:
                 act, _ = jit_policy(obs, act_rng)
                 z = act[:nz]  # Lifted state
