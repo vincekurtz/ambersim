@@ -148,7 +148,7 @@ class KoopmanPendulumSwingupEnv(MjxEnv):
 def train_swingup():
     """Train a pendulum swingup agent with custom network architectures."""
     # Choose the dimension of the lifted state for the controller system
-    nz = 24
+    nz = 10
 
     # Initialize the environment
     envs.register_environment("pendulum_swingup", functools.partial(KoopmanPendulumSwingupEnv, nz=nz))
@@ -180,7 +180,7 @@ def train_swingup():
         num_evals=250,
         reward_scaling=0.1,
         episode_length=200,
-        normalize_observations=False,
+        normalize_observations=True,
         action_repeat=1,
         unroll_length=10,
         num_minibatches=32,
@@ -255,7 +255,7 @@ def test_trained_swingup_policy():
     ppo_networks = network_wrapper.make_ppo_networks(
         observation_size=env.observation_size,
         action_size=env.action_size,
-        # preprocess_observations_fn=running_statistics.normalize,
+        preprocess_observations_fn=running_statistics.normalize,
         check_sizes=False,  # disable size checks since policy outputs action and next lifted state
     )
     make_policy = make_inference_fn(ppo_networks)
