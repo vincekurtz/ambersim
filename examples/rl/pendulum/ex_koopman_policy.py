@@ -310,7 +310,7 @@ def test_trained_swingup_policy():
 
     if manual_policy:
         # Sanity check: manually implementing the policy with ABCD matrices
-        A = np.asarray(params[1]["params"]["A"])
+        A = np.diag(np.asarray(params[1]["params"]["A"])[:, 0])
         B = np.asarray(params[1]["params"]["B"])
         C = np.asarray(params[1]["params"]["C"])
         D = np.asarray(params[1]["params"]["D"])

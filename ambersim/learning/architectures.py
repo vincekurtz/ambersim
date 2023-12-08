@@ -256,7 +256,7 @@ class LinearSystemPolicy(nn.Module):
 
     def setup(self):
         """Initialize the network."""
-        self.A = self.param("A", nn.initializers.lecun_normal(), (self.nz, self.nz))
+        self.A = jnp.diag(self.param("A", nn.initializers.lecun_normal(), (self.nz, 1))[:, 0])
         self.B = self.param("B", nn.initializers.lecun_normal(), (self.nz, self.ny))
         self.C = self.param("C", nn.initializers.lecun_normal(), (self.nu, self.nz))
         self.D = self.param("D", nn.initializers.lecun_normal(), (self.nu, self.ny))
