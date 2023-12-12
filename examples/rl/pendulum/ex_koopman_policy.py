@@ -13,7 +13,6 @@ import numpy as np
 from brax import envs
 from brax.io import model
 from brax.training import distribution
-from brax.training.acme import running_statistics
 from brax.training.agents.ppo import train as ppo
 from brax.training.agents.ppo.networks import make_inference_fn
 from mujoco import mjx
@@ -194,7 +193,7 @@ class NormalDistribution(distribution.ParametricDistribution):
 def train_swingup():
     """Train a pendulum swingup agent with custom network architectures."""
     # Choose the dimension of the lifted state for the controller system
-    nz = 10
+    nz = 30
 
     # Initialize the environment
     envs.register_environment("pendulum_swingup", functools.partial(KoopmanPendulumSwingupEnv, nz=nz))
@@ -301,7 +300,6 @@ def test_trained_swingup_policy():
         ppo_networks = network_wrapper.make_ppo_networks(
             observation_size=env.observation_size,
             action_size=env.action_size,
-            # preprocess_observations_fn=running_statistics.normalize,
             check_sizes=False,  # disable size checks since policy outputs action and next lifted state
         )
         make_policy = make_inference_fn(ppo_networks)
