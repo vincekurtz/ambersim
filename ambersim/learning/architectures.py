@@ -3,7 +3,6 @@ from typing import Sequence
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from jax import lax
 
 
 def print_module_summary(module: nn.Module, input_shape: Sequence[int]):
