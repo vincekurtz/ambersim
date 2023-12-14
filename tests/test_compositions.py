@@ -7,9 +7,34 @@ from ambersim.learning.architectures import (
     LinearSystemPolicy,
     NestedLinearPolicy,
     ParallelComposition,
+    Quadratic,
     SeriesComposition,
     print_module_summary,
 )
+
+
+def test_quadratic():
+    """Test creating and evaluating a quadratic module."""
+    input_size = (2, 5)
+
+    # Create the quadratic module
+    rng = jax.random.PRNGKey(0)
+    net = Quadratic(input_size[-1])
+    dummy_input = jp.ones(input_size)
+    params = net.init(rng, dummy_input)
+
+    # Print the network summary
+    print_module_summary(net, input_size)
+
+    # Forward pass through the network
+    my_input = jax.random.normal(rng, input_size)
+    my_output = net.apply(params, my_input)
+
+    print(my_input)
+    print(my_output)
+
+    assert my_output.shape[-1] == 1
+    assert my_output.shape[0] == input_size[0]
 
 
 def test_series():
@@ -124,7 +149,7 @@ def test_linear_system_policy():
     dummy_input = jp.ones((nz + ny,))  # input is lifted state + observation
     params = net.init(jax.random.PRNGKey(0), dummy_input)
 
-    assert params["params"]["A"].shape == (nz, nz)
+    assert params["params"]["L"].shape == (nz,)
     assert params["params"]["B"].shape == (nz, ny)
     assert params["params"]["C"].shape == (nu, nz)
     assert params["params"]["D"].shape == (nu, ny)
@@ -144,4 +169,5 @@ if __name__ == "__main__":
     # test_parallel()
     # test_hierarchy()
     # test_nested_linear()
-    test_linear_system_policy()
+    # test_linear_system_policy()
+    test_quadratic()

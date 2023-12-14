@@ -387,3 +387,27 @@ class LiftedInputLinearSystemPolicy(nn.Module):
         log_std_u = jnp.tile(self.log_std_u, zy.shape[:-1] + (1,))
 
         return jnp.concatenate([z_next, u, log_std_z, log_std_u], axis=-1)
+
+
+class Quadratic(nn.Module):
+    """A module that computes a quadratic function of its input.
+
+        y = x^T Q x + b^T x + c
+
+    Note: the output is always a scalar.
+
+    Args:
+        input_size: Dimension of the input x
+    """
+
+    nx: int
+
+    def setup(self):
+        """Initialize the module."""
+        self.Q = self.param("Q", nn.initializers.lecun_normal(), (self.nx, self.nx))
+        self.b = self.param("b", nn.initializers.lecun_normal(), (self.nx, 1))
+        self.c = self.param("c", nn.initializers.zeros, (1,))
+
+    def __call__(self, x: jnp.ndarray):
+        """Forward pass."""
+        return jnp.einsum("ij,...i,...j->...", self.Q, x, x)[..., jnp.newaxis] + jnp.matmul(x, self.b) + self.c
