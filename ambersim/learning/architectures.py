@@ -291,7 +291,7 @@ class BilinearSystemPolicy(nn.Module):
 
     where y_t is the observation, u_t is the action, and z_t is the controller state.
     We assume that the z is stored in the env, so this module takes as input [z_t, y_t]
-    and sends as output [z_{t+1}, u_t].
+    and sends as output [z_{t+1}, u_t]. A is a diagonal matrix with elements in [-1, 1].
 
     It also outputs log standard deviations for u_t and z_{t+1}, which are used in PPO.
 
@@ -307,8 +307,8 @@ class BilinearSystemPolicy(nn.Module):
 
     def setup(self):
         """Initialize the network."""
-        self.A = self.param("A", nn.initializers.lecun_normal(), (self.nz, self.nz))
-        self.B = self.param("B", nn.initializers.lecun_normal(), (self.nz, self.nz, self.ny))
+        self.L = self.param("L", nn.initializers.zeros, (self.nz,))
+        self.B = self.param("B", nn.initializers.zeros, (self.nz, self.nz, self.ny))
         self.C = self.param("C", nn.initializers.lecun_normal(), (self.nu, self.nz))
         self.D = self.param("D", nn.initializers.lecun_normal(), (self.nu, self.ny))
 
@@ -323,7 +323,7 @@ class BilinearSystemPolicy(nn.Module):
 
         # System dynamics
         Bzy = jnp.einsum("ijk,...j,...k->...i", self.B, z, y)
-        z_next = jnp.matmul(z, self.A.T) + Bzy
+        z_next = z * jnp.tanh(self.L) + Bzy
         u = jnp.matmul(z, self.C.T) + jnp.matmul(y, self.D.T)
 
         # Tile log_std to match the dimensions of the input (zy)

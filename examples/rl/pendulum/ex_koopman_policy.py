@@ -17,7 +17,7 @@ from brax.training.agents.ppo.networks import make_inference_fn
 from mujoco import mjx
 from tensorboardX import SummaryWriter
 
-from ambersim.learning.architectures import MLP, LinearSystemPolicy, Quadratic
+from ambersim.learning.architectures import MLP, BilinearSystemPolicy, LinearSystemPolicy
 from ambersim.learning.distributions import NormalDistribution
 from ambersim.rl.base import MjxEnv, State
 from ambersim.rl.helpers import BraxPPONetworksWrapper
@@ -157,12 +157,11 @@ def train_swingup():
     # Policy network takes as input [z, y]: the current lifted state and observations.
     # It outputs [z_next, u, σ(z_next), σ(u)]: the next lifted state, control input,
     # and their standard deviations.
-    policy_network = LinearSystemPolicy(nz=nz, ny=3, nu=1)
+    policy_network = BilinearSystemPolicy(nz=nz, ny=3, nu=1)
 
     # Value network takes as input observations and the current lifted state,
     # and outputs a scalar value.
-    # value_network = MLP(layer_sizes=(128, 128, 1))
-    value_network = Quadratic(nz + 3)
+    value_network = MLP(layer_sizes=(128, 128, 1))
     network_wrapper = BraxPPONetworksWrapper(
         policy_network=policy_network,
         value_network=value_network,
