@@ -232,84 +232,46 @@ def test_trained_swingup_policy():
     # Load the trained policy
     print("Loading trained policy...")
     params_path = "/tmp/pendulum_params.pkl"
-    networks_path = "/tmp/pendulum_networks.pkl"
     params = model.load_params(params_path)
-    with open(networks_path, "rb") as f:
-        network_wrapper = pickle.load(f)
 
-    # Create a lifted state for the controller
-    nz = network_wrapper.policy_network.nz
-    z = jnp.zeros(nz)
+    # Create the policy, which is just a linear system
+    A = np.asarray(params[1]["params"]["A"])
+    B = np.asarray(params[1]["params"]["B"])
+    C = np.asarray(params[1]["params"]["C"])
+    D = np.asarray(params[1]["params"]["D"])
+    nz = A.shape[0]
+    z = np.zeros(nz)
 
     # Initialize the environment
-    envs.register_environment("pendulum_swingup", functools.partial(KoopmanPendulumSwingupEnv, nz=nz))
-    env = envs.get_environment("pendulum_swingup")
-    mj_model = env.model
+    mj_model = load_mj_model_from_file("models/pendulum/scene.xml")
     mj_data = mujoco.MjData(mj_model)
-    obs = env.compute_obs(mjx.device_put(mj_data), {"z": z})
-
-    # Create the policy function
-    manual_policy = True
-    if not manual_policy:
-        ppo_networks = network_wrapper.make_ppo_networks(
-            observation_size=env.observation_size,
-            action_size=env.action_size,
-            check_sizes=False,  # disable size checks since policy outputs action and next lifted state
-        )
-        make_policy = make_inference_fn(ppo_networks)
-        policy = make_policy(params, deterministic=True)
-        jit_policy = jax.jit(policy)
-
-    if manual_policy:
-        # Sanity check: manually implementing the policy with ABCD matrices
-        A = np.asarray(params[1]["params"]["A"])
-        B = np.asarray(params[1]["params"]["B"])
-        C = np.asarray(params[1]["params"]["C"])
-        D = np.asarray(params[1]["params"]["D"])
-
-    # Flag for resetting the lifted state periodically
-    do_resets = False
-    i = 0
+    dt = mj_model.opt.timestep
 
     print("Simulating...")
-    rng = jax.random.PRNGKey(0)
     with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
         while viewer.is_running():
             start_time = time.time()
-            act_rng, rng = jax.random.split(rng)
-
             print("|z|: ", jnp.linalg.norm(z))
 
+            # Get an observation
+            theta = mj_data.qpos[0]
+            theta_dot = mj_data.qvel[0]
+            y = np.array([np.cos(theta), np.sin(theta), theta_dot])
+
             # Apply the policy
-            if manual_policy:
-                y = obs[nz:]
-                u = C @ z + D @ y
-                z = A @ z + B @ y
-            else:
-                act, _ = jit_policy(obs, act_rng)
-                z = act[:nz]  # Lifted state
-                u = act[nz:]  # Control input
+            u = C @ z + D @ y
+            z = A @ z + B @ y
 
             mj_data.ctrl[:] = u
-            obs = env.compute_obs(mjx.device_put(mj_data), {"z": z})
 
-            # Step the simulation
-            for _ in range(env._physics_steps_per_control_step):
-                mujoco.mj_step(mj_model, mj_data)
-                viewer.sync()
+            # Step the simulation (one physics step per control step here)
+            mujoco.mj_step(mj_model, mj_data)
+            viewer.sync()
 
             # Try to run in roughly realtime
             elapsed = time.time() - start_time
-            dt = float(env.dt)
             if elapsed < dt:
                 time.sleep(dt - elapsed)
-
-            # Reset the lifted state every 200 steps
-            if do_resets:
-                if i % 200 == 0:
-                    print("********* RESET *********")
-                    z = jnp.zeros(nz)
-                i += 1
 
 
 if __name__ == "__main__":
