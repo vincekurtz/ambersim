@@ -258,7 +258,7 @@ class LinearSystemPolicy(nn.Module):
 
     def setup(self):
         """Initialize the network."""
-        self.L = self.param("L", nn.initializers.zeros, (self.nz,))
+        self.A = self.param("A", nn.initializers.zeros, (self.nz, self.nz))
         self.B = self.param("B", nn.initializers.lecun_normal(), (self.nz, self.ny))
         self.C = self.param("C", nn.initializers.lecun_normal(), (self.nu, self.nz))
         self.D = self.param("D", nn.initializers.lecun_normal(), (self.nu, self.ny))
@@ -273,7 +273,7 @@ class LinearSystemPolicy(nn.Module):
         y = zy[..., self.nz :]
 
         # Linear map: note that the last dim holds our data so we transpose
-        z_next = z * jnp.tanh(self.L) + jnp.matmul(y, self.B.T)
+        z_next = jnp.matmul(z, self.A.T) + jnp.matmul(y, self.B.T)
         u = jnp.matmul(z, self.C.T) + jnp.matmul(y, self.D.T)
 
         # Tile log_std to match the dimensions of the input (zy)

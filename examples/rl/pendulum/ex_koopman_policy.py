@@ -157,7 +157,7 @@ def train_swingup():
     # Policy network takes as input [z, y]: the current lifted state and observations.
     # It outputs [z_next, u, σ(z_next), σ(u)]: the next lifted state, control input,
     # and their standard deviations.
-    policy_network = BilinearSystemPolicy(nz=nz, ny=3, nu=1)
+    policy_network = LinearSystemPolicy(nz=nz, ny=3, nu=1)
 
     # Value network takes as input observations and the current lifted state,
     # and outputs a scalar value.
