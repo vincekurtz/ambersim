@@ -188,7 +188,7 @@ def train_swingup():
         num_envs=1024,
         batch_size=512,
         network_factory=network_factory,
-        seed=0,
+        seed=3,
     )
 
     # Define a callback to log progress
@@ -262,7 +262,7 @@ def test_trained_swingup_policy():
 
     if manual_policy:
         # Sanity check: manually implementing the policy with ABCD matrices
-        A = np.diag(np.tanh(np.asarray(params[1]["params"]["L"])))
+        A = np.asarray(params[1]["params"]["A"])
         B = np.asarray(params[1]["params"]["B"])
         C = np.asarray(params[1]["params"]["C"])
         D = np.asarray(params[1]["params"]["D"])

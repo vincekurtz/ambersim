@@ -241,9 +241,6 @@ class LinearSystemPolicy(nn.Module):
     We assume that the z is stored in the env, so this module takes as input [z_t, y_t]
     and sends as output [z_{t+1}, u_t].
 
-    Note that A = diag(tanh(L)) is a diagonal matrix with elements in [-1, 1],
-    so that z_{t+1} = A z_t is stable. B, C, and D are all dense matrices.
-
     It also outputs log standard deviations for u_t and z_{t+1}, which are used in PPO.
 
     Args:
