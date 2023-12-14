@@ -49,8 +49,8 @@ class KoopmanPendulumSwingupEnv(MjxEnv):
         self.control_cost_weight = 0.001
         self.qpos_hi = jnp.pi
         self.qpos_lo = -jnp.pi
-        self.qvel_hi = 2
-        self.qvel_lo = -2
+        self.qvel_hi = 4
+        self.qvel_lo = -4
 
         # Initialize the environment
         mj_model = load_mj_model_from_file(model_path)
