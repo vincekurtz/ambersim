@@ -28,6 +28,7 @@ from ambersim.utils.io_utils import load_mj_model_from_file
 Perform pendulum swingup training with a Koopman linear system policy.
 """
 
+
 class RecurrentWrapper(MjxEnv):
     """Environment for training recurrent policies with Brax.
 
@@ -54,35 +55,6 @@ class RecurrentWrapper(MjxEnv):
         self.nz = nz
         self.z_cost_weight = z_cost_weight
 
-    def compute_obs(self, data: mjx.Data, info: Dict[str, Any]) -> jax.Array:
-        """Compute the observation.
-
-        Args:
-            data: the current simulation data
-            info: extra info, including the current hidden state
-
-        Returns:
-            obs: the observation, which is [z, y]
-        """
-        y = self.env.compute_obs(data, info)
-        obs = jnp.concatenate((info["z"], y))
-        return obs
-    
-    def compute_reward(self, data: mjx.Data, info: Dict[str, Any]) -> jax.Array:
-        """Compute the reward, including an extra penalty on |z|^2.
-
-        Args:
-            data: the current simulation data
-            info: extra info, including the current hidden state
-
-        Returns:
-            reward: the env reward plus the extra penalty on |z|^2
-        """
-        reward = self.env.compute_reward(data, info)
-        z = info["z"]
-        reward = reward - self.z_cost_weight * jnp.square(z).sum()
-        return reward
-    
     def reset(self, rng: jax.Array) -> State:
         """Reset the environment.
 
@@ -94,53 +66,59 @@ class RecurrentWrapper(MjxEnv):
         Returns:
             state: the initial state
         """
+        # Reset the underlying environment
         env_state = self.env.reset(rng)
+
+        # Reset the hidden state
         info = env_state.info
         info["z"] = jnp.zeros(self.nz)
-        obs = jnp.concatenate([env_state.obs, info["z"]])
+
+        # Create the new observation [z, y]
+        obs = jnp.concatenate([info["z"], env_state.obs])
         state = env_state.replace(info=info, obs=obs)
         return state
-    
+
     def step(self, state: State, action: jax.Array) -> State:
         """Take a step in the environment.
 
         Args:
             state: the current state
-            action: the action, which is a tuple of (z_next, u)
+            action: the action, which is [z_next, u]
 
         Returns:
             state: the next state
         """
-        print("Stepping")
-        z_next = action[: self.nz]
-        u = action[self.nz :]
-        state.info["z"] = z_next
-        print(state.info["z"].shape)
-        print(u.shape)
+        # Advance the underlying environment
         env_state = state.replace(obs=state.obs[self.nz :])
-        env_state = self.env.step(env_state, u)
-        state = env_state.replace(obs=jnp.concatenate([state.info["z"], env_state.obs]))
+        env_state = self.env.step(env_state, action[self.nz :])
+
+        # Advance the hidden state and create the new observation [z, y]
+        z = action[: self.nz]
+        obs = jnp.concatenate([z, env_state.obs])
+
+        # Modify the reward to include a cost on the hidden state
+        reward = env_state.reward  # - self.z_cost_weight * jnp.square(z).sum()
+
+        # Update the state
+        state = env_state.replace(obs=obs, reward=reward)
+        state.info["z"] = z
+        state.metrics["reward"] = reward
         return state
-    
+
     @property
     def dt(self) -> jax.Array:
         """The timestep of the environment."""
         return self.env.dt
-    
+
     @property
     def observation_size(self) -> int:
         """The size of the observation."""
         return self.env.observation_size + self.nz
-    
+
     @property
     def action_size(self) -> int:
         """The size of the action."""
         return self.env.action_size + self.nz
-    
-    @property
-    def backend(self) -> str:
-        """The backend of the environment."""
-        return self.env.backend
 
 
 class KoopmanPendulumSwingupEnv(MjxEnv):
@@ -258,7 +236,7 @@ class KoopmanPendulumSwingupEnv(MjxEnv):
         state.metrics["reward"] = reward
         state = state.replace(pipeline_state=data, obs=obs, reward=reward, done=done)
         return state
-    
+
     @property
     def action_size(self) -> int:
         """The size of the action."""
@@ -271,12 +249,11 @@ def train_swingup():
     nz = 10
 
     def make_env(*args):
-        return KoopmanPendulumSwingupEnv(*args, nz=nz)
-        #return RecurrentWrapper(PendulumSwingupEnv(*args), nz=nz)
-
+        # return KoopmanPendulumSwingupEnv(*args, nz=nz)
+        return RecurrentWrapper(PendulumSwingupEnv(*args), nz=nz)
 
     # Initialize the environment
-    #envs.register_environment("pendulum_swingup", functools.partial(KoopmanPendulumSwingupEnv, nz=nz))
+    # envs.register_environment("pendulum_swingup", functools.partial(KoopmanPendulumSwingupEnv, nz=nz))
     envs.register_environment("pendulum_swingup", make_env)
     env = envs.get_environment("pendulum_swingup")
 
