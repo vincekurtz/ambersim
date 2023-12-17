@@ -130,6 +130,48 @@ class BarkourEnv(MjxEnv):
         new_cmd = jnp.array([lin_vel_x[0], lin_vel_y[0], ang_vel_yaw[0]])
         return new_cmd
 
+    def reset(self, rng: jax.Array) -> State:
+        """See parent docstring."""
+        rng, key = jax.random.split(rng)
+
+        qpos = jnp.array(self._init_q)
+        qvel = jnp.zeros(self.model.nv)
+        new_cmd = self.sample_command(key)
+        data = self.pipeline_init(qpos, qvel)
+
+        state_info = {
+            "rng": rng,
+            "last_act": jnp.zeros(12),
+            "last_vel": jnp.zeros(12),
+            "last_contact_buffer": jnp.zeros((20, 4), dtype=bool),
+            "command": new_cmd,
+            "last_contact": jnp.zeros(4, dtype=bool),
+            "feet_air_time": jnp.zeros(4),
+            "obs_history": jnp.zeros(15 * 31),
+            "reward_tuple": {
+                "tracking_lin_vel": 0.0,
+                "tracking_ang_vel": 0.0,
+                "lin_vel_z": 0.0,
+                "ang_vel_xy": 0.0,
+                "orientation": 0.0,
+                "torque": 0.0,
+                "action_rate": 0.0,
+                "stand_still": 0.0,
+                "feet_air_time": 0.0,
+                "foot_slip": 0.0,
+            },
+            "step": 0,
+        }
+
+        x, xd = self._pos_vel(data)
+        obs = self._get_obs(data.qpos, x, xd, state_info)
+        reward, done = jnp.zeros(2)
+        metrics = {"total_dist": 0.0}
+        for k in state_info["reward_tuple"]:
+            metrics[k] = state_info["reward_tuple"][k]
+        state = State(data, obs, reward, done, metrics, state_info)
+        return state
+
     def step(self, state: State, action: jax.Array) -> State:
         """See parent docstring."""
         rng, rng_noise, cmd_rng = jax.random.split(state.info["rng"], 3)
