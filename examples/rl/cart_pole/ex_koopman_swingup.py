@@ -29,13 +29,19 @@ Perform cart-pole swingup with a Koopman linear system policy.
 
 def train():
     """Train a policy to swing up the cart-pole, then save the trained policy."""
+    # Choose the dimension of the lifted state for the controller system
+    nz = 10
+
     print("Creating cart-pole environment...")
-    envs.register_environment("cart_pole", CartPoleSwingupEnv)
+    envs.register_environment("cart_pole", lambda *args: RecurrentWrapper(CartPoleSwingupEnv(*args), nz=nz))
     env = envs.get_environment("cart_pole")
 
     # Create the policy and value networks
     print("Creating policy network...")
-    policy_network = MLP(layer_sizes=[128, 128, 2])
+    ny = 5  # observations are [cart_pos, cos(theta), sin(theta), cart_vel, dtheta]
+    nu = 1  # control input is [cart_force]
+    # policy_network = MLP(layer_sizes=[128, 128, 2*(nz + nu)])
+    policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
 
     value_network = MLP(layer_sizes=[256, 256, 1])
     network_wrapper = BraxPPONetworksWrapper(
@@ -45,7 +51,7 @@ def train():
     )
 
     # Set the number of training steps and evaluations
-    num_timesteps = 5_000_000
+    num_timesteps = 50_000_000
     eval_every = 100_000
 
     # Create the PPO agent
