@@ -11,7 +11,6 @@ import numpy as np
 from brax import envs
 from brax.io import model
 from brax.training.agents.ppo import train as ppo
-from brax.training.agents.ppo.networks import make_inference_fn
 from mujoco import mjx
 from tensorboardX import SummaryWriter
 
@@ -100,7 +99,7 @@ def train():
             writer.add_scalar(key, val, num_steps)
 
     print("Training...")
-    make_inference_fn, params, metrics = train_fn(environment=env, progress_fn=progress)
+    _, params, _ = train_fn(environment=env, progress_fn=progress)
 
     print(f"  time to jit: {times[1] - times[0]}")
     print(f"  time to train: {times[-1] - times[1]}")
@@ -116,55 +115,49 @@ def train():
 
 def test(start_angle=0.0):
     """Load a trained policy and run a little sim with it."""
-    # Create an environment for evaluation
-    print("Creating test environment...")
-    envs.register_environment("cart_pole", lambda *args: RecurrentWrapper(CartPoleSwingupEnv(*args), nz=10))
-    env = envs.get_environment("cart_pole")
-    mj_model = env.model
-    mj_data = mujoco.MjData(mj_model)
-
-    # Set the initial state
-    mj_data.qpos[1] = start_angle
-    obs = env.compute_obs(mjx.device_put(mj_data), {})
-
-    # Load the saved policy
-    print("Loading policy ...")
+    # Load the trained policy
+    print("Loading trained policy...")
     params_path = "/tmp/cart_pole_params.pkl"
-    networks_path = "/tmp/cart_pole_networks.pkl"
     params = model.load_params(params_path)
-    with open(networks_path, "rb") as f:
-        network_wrapper = pickle.load(f)
 
-    # Create the policy function
-    print("Creating policy network...")
-    ppo_networks = network_wrapper.make_ppo_networks(
-        observation_size=env.observation_size,
-        action_size=env.action_size,
-    )
-    make_policy = make_inference_fn(ppo_networks)
-    policy = make_policy(params, deterministic=True)
-    jit_policy = jax.jit(policy)
+    # Create the policy, which is just a linear system
+    A = np.asarray(params[1]["params"]["A"])
+    B = np.asarray(params[1]["params"]["B"])
+    C = np.asarray(params[1]["params"]["C"])
+    D = np.asarray(params[1]["params"]["D"])
+    nz = A.shape[0]
+    z = np.zeros(nz)
 
-    # Run a little sim
-    rng = jax.random.PRNGKey(0)
+    # Initialize the environment
+    mj_model = load_mj_model_from_file("models/cart_pole/cart_pole.xml")
+    mj_data = mujoco.MjData(mj_model)
+    dt = mj_model.opt.timestep
+
+    print("Simulating...")
     with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
         while viewer.is_running():
-            step_start = time.time()
-            act_rng, rng = jax.random.split(rng)
+            start_time = time.time()
+            print("|z|: ", np.linalg.norm(z))
+
+            # Get an observation
+            p = mj_data.qpos[0]
+            p_dot = mj_data.qvel[0]
+            theta = mj_data.qpos[1]
+            theta_dot = mj_data.qvel[1]
+            y = np.array([p, np.cos(theta), np.sin(theta), p_dot, theta_dot])
 
             # Apply the policy
-            act, _ = jit_policy(obs, act_rng)
-            mj_data.ctrl[:] = act
-            obs = env.compute_obs(mjx.device_put(mj_data), {})
+            u = C @ z + D @ y
+            z = A @ z + B @ y
 
-            # Step the simulation
-            for _ in range(env._physics_steps_per_control_step):
-                mujoco.mj_step(mj_model, mj_data)
-                viewer.sync()
+            mj_data.ctrl[:] = u
 
-            # Try to run in roughly real time
-            elapsed = time.time() - step_start
-            dt = float(env.dt)
+            # Step the simulation (one physics step per control step here)
+            mujoco.mj_step(mj_model, mj_data)
+            viewer.sync()
+
+            # Try to run in roughly realtime
+            elapsed = time.time() - start_time
             if elapsed < dt:
                 time.sleep(dt - elapsed)
 
