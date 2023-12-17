@@ -33,9 +33,12 @@ def train():
     envs.register_environment("barkour", BarkourEnv)
     env = envs.get_environment("barkour")
 
+    print(env.observation_size, env.action_size)
+
+
     # Create policy and value networks
-    policy_network = MLP(layer_sizes=(32, 32, 32, 32, 2 * env.action_size))
-    value_network = MLP(layer_sizes=(256, 256, 256, 256, 256, 1))
+    policy_network = MLP(layer_sizes=(128, 128, 2 * env.action_size))
+    value_network = MLP(layer_sizes=(256, 256, 1))
 
     network_wrapper = BraxPPONetworksWrapper(
         policy_network=policy_network,
@@ -43,11 +46,14 @@ def train():
         action_distribution=NormalTanhDistribution,
     )
 
+    num_timesteps = 60_000_000
+    eval_every = 1_000_000
+
     # Define the training function
     train_fn = functools.partial(
         ppo.train,
         num_timesteps=60_000_000,
-        num_evals=3,
+        num_evals=num_timesteps // eval_every,
         reward_scaling=1,
         episode_length=1000,
         normalize_observations=True,
@@ -58,10 +64,11 @@ def train():
         num_updates_per_batch=4,
         discounting=0.99,
         learning_rate=3e-4,
-        entropy_cost=1e-2,
-        num_envs=8192,
+        entropy_cost=1e-5,
+        num_envs=4096,
         batch_size=1024,
         network_factory=network_wrapper.make_ppo_networks,
+        clipping_epsilon=0.2,
         num_resets_per_eval=10,
         seed=0,
     )

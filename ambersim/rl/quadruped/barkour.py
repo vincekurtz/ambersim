@@ -148,7 +148,7 @@ class BarkourEnv(MjxEnv):
             "command": new_cmd,
             "last_contact": jnp.zeros(4, dtype=bool),
             "feet_air_time": jnp.zeros(4),
-            "obs_history": jnp.zeros(15 * 31),
+            "obs_history": jnp.zeros(31),  # just one step of history
             "reward_tuple": {
                 "tracking_lin_vel": 0.0,
                 "tracking_ang_vel": 0.0,
