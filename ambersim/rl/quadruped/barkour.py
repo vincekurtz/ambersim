@@ -101,7 +101,7 @@ class BarkourEnv(MjxEnv):
         )
 
         # Define some useful model quantities
-        self.torso_idx = mujoco.mj_nam2id(mj_model, mujoco.mjtObj.mjOBJ_BODY.value, "torso")
+        self.torso_idx = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_BODY.value, "torso")
         self._feet_index = jnp.array([3, 6, 9, 12])
         self._feet_pos = jnp.array(
             [
