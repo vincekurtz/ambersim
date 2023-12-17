@@ -5,20 +5,17 @@ import time
 from datetime import datetime
 
 import jax
-import jax.numpy as jnp
 import mujoco
 import mujoco.viewer
 import numpy as np
 from brax import envs
 from brax.io import model
 from brax.training.agents.ppo import train as ppo
-from brax.training.agents.ppo.networks import make_inference_fn
 from mujoco import mjx
 from tensorboardX import SummaryWriter
 
-from ambersim.learning.architectures import MLP, BilinearSystemPolicy, LinearSystemPolicy
+from ambersim.learning.architectures import MLP, LinearSystemPolicy
 from ambersim.learning.distributions import NormalDistribution
-from ambersim.rl.base import MjxEnv, State
 from ambersim.rl.env_wrappers import RecurrentWrapper
 from ambersim.rl.helpers import BraxPPONetworksWrapper
 from ambersim.rl.pendulum.swingup import PendulumSwingupEnv
@@ -51,9 +48,6 @@ def train_swingup():
         value_network=value_network,
         action_distribution=NormalDistribution,
     )
-    network_factory = functools.partial(
-        network_wrapper.make_ppo_networks, check_sizes=False
-    )  # disable size checks since policy outputs both action and next lifted state
 
     train_fn = functools.partial(
         ppo.train,
@@ -71,7 +65,7 @@ def train_swingup():
         entropy_cost=1e-4,
         num_envs=1024,
         batch_size=512,
-        network_factory=network_factory,
+        network_factory=network_wrapper.make_ppo_networks,
         seed=3,
     )
 
@@ -135,7 +129,7 @@ def test_trained_swingup_policy():
     with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
         while viewer.is_running():
             start_time = time.time()
-            print("|z|: ", jnp.linalg.norm(z))
+            print("|z|: ", np.linalg.norm(z))
 
             # Get an observation
             theta = mj_data.qpos[0]
