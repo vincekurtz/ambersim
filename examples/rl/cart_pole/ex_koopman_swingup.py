@@ -118,7 +118,7 @@ def test(start_angle=0.0):
     """Load a trained policy and run a little sim with it."""
     # Create an environment for evaluation
     print("Creating test environment...")
-    envs.register_environment("cart_pole", CartPoleSwingupEnv)
+    envs.register_environment("cart_pole", lambda *args: RecurrentWrapper(CartPoleSwingupEnv(*args), nz=10))
     env = envs.get_environment("cart_pole")
     mj_model = env.model
     mj_data = mujoco.MjData(mj_model)
