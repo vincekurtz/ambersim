@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional, Tuple
 import jax
 import jax.numpy as jnp
 import mujoco
+import numpy as np
 from brax import math
 from brax.base import Base, Motion, Transform
 from etils import epath
@@ -27,43 +28,43 @@ class BarkourConfig:
     # Reward function coefficients, from the MJX tutorial
 
     # Track the base x-y velocity (no z-velocity tracking.)
-    tracking_lin_vel = (1.5,)
+    tracking_lin_vel = 1.5
 
     # Track the angular velocity along z-axis, i.e. yaw rate.
-    tracking_ang_vel = (0.8,)
+    tracking_ang_vel = 0.8
 
     # Penalize the base velocity in z direction, L2 penalty.
-    lin_vel_z = (-2.0,)
+    lin_vel_z = -2.0
 
     # Penalize the base roll and pitch rate. L2 penalty.
-    ang_vel_xy = (-0.05,)
+    ang_vel_xy = -0.05
 
     # Penalize non-zero roll and pitch angles. L2 penalty.
-    orientation = (-5.0,)
+    orientation = -5.0
 
     # L2 regularization of joint torques, |tau|^2.
-    torques = (-0.002,)
+    torques = -0.002
 
     # Penalize the change in the action and encourage smooth
     # actions. L2 regularization |action - last_action|^2
-    action_rate = (-0.1,)
+    action_rate = -0.1
 
     # Encourage long swing steps.  However, it does not
     # encourage high clearances.
-    feet_air_time = (0.2,)
+    feet_air_time = 0.2
 
     # Encourage no motion at zero command, L2 regularization
     # |q - q_default|^2.
-    stand_still = (-0.5,)
+    stand_still = -0.5
 
     # Early termination penalty.
-    termination = (-1.0,)
+    termination = -1.0
 
     # Penalizing foot slipping on the ground.
-    foot_slip = (-0.1,)
+    foot_slip = -0.1
 
     # Tracking reward = exp(-error^2/sigma).
-    tracking_sigma = (0.25,)
+    tracking_sigma = 0.25
 
     # Observation noise level
     obs_noise = 0.05
@@ -178,14 +179,14 @@ class BarkourEnv(MjxEnv):
 
         # physics step
         cur_action = jnp.array(action)
-        action = action[:12] * self._action_scale
+        action = action[:12] * self.config.action_scale
         motor_targets = jnp.clip(action + self._default_ap_pose, self.lowers, self.uppers)
         data = self.pipeline_step(state.pipeline_state, motor_targets)
 
         # observation data
         x, xd = self._pos_vel(data)
         obs = self._get_obs(data.qpos, x, xd, state.info)
-        obs_noise = self._obs_noise * jax.random.uniform(rng_noise, obs.shape, minval=-1, maxval=1)
+        obs_noise = self.config.obs_noise * jax.random.uniform(rng_noise, obs.shape, minval=-1, maxval=1)
         qpos, qvel = data.qpos, data.qvel
         joint_angles = qpos[7:]
         joint_vel = qvel[6:]
@@ -249,15 +250,15 @@ class BarkourEnv(MjxEnv):
         done |= x.pos[0, 2] < 0.18
 
         # termination reward
-        reward += done * (state.info["step"] < self._reset_horizon) * self.config.termination
+        reward += done * (state.info["step"] < self.config.reset_horizon) * self.config.termination
 
-        # when done, sample new command if more than _reset_horizon timesteps
+        # when done, sample new command if more than reset_horizon timesteps
         # achieved
         state.info["command"] = jnp.where(
-            done & (state.info["step"] > self._reset_horizon), self.sample_command(cmd_rng), state.info["command"]
+            done & (state.info["step"] > self.config.reset_horizon), self.sample_command(cmd_rng), state.info["command"]
         )
         # reset the step counter when done
-        state.info["step"] = jnp.where(done | (state.info["step"] > self._reset_horizon), 0, state.info["step"])
+        state.info["step"] = jnp.where(done | (state.info["step"] > self.config.reset_horizon), 0, state.info["step"])
 
         # log total displacement as a proxy metric
         state.metrics["total_dist"] = math.normalize(x.pos[self.torso_idx])[1]
@@ -354,3 +355,11 @@ class BarkourEnv(MjxEnv):
         _, foot_world_vel = self._get_feet_pos_vel(x, xd)
         # Penalize large feet velocity for feet that are in contact with the ground.
         return jnp.sum(jnp.square(foot_world_vel[:, :2]) * contact_filt.reshape((-1, 1)))
+
+    def _pos_vel(self, data: mjx.Data) -> Tuple[Transform, Motion]:
+        """Returns 6d spatial transform and 6d velocity for all bodies."""
+        x = Transform(pos=data.xpos[1:, :], rot=data.xquat[1:, :])
+        cvel = Motion(vel=data.cvel[1:, 3:], ang=data.cvel[1:, :3])
+        offset = data.xpos[1:, :] - data.subtree_com[self.model.body_rootid[np.arange(1, self.model.nbody)]]
+        xd = Transform.create(pos=offset).vmap().do(cvel)
+        return x, xd
