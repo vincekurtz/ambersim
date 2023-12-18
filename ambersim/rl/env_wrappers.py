@@ -84,7 +84,6 @@ class RecurrentWrapper(MjxEnv):
         # Update the state
         state = env_state.replace(obs=obs, reward=reward)
         state.info["z"] = z
-        # state.metrics["reward"] = reward
         return state
 
     def compute_obs(self, data: mjx.Data, info: Dict[str, Any]) -> jax.Array:

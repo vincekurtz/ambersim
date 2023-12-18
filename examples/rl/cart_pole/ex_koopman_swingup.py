@@ -55,7 +55,7 @@ def train():
     )
 
     # Set the number of training steps and evaluations
-    num_timesteps = 20_000_000
+    num_timesteps = 5_000_000
     eval_every = 100_000
 
     # Create the PPO agent
@@ -130,8 +130,8 @@ def test(start_angle=0.0):
 
     # Set the initial state
     mj_data.qpos[1] = start_angle
-    z = jnp.zeros(nz)
-    obs = env.compute_obs(mjx.device_put(mj_data), {"z": z})
+    info = {"z": jnp.zeros(nz)}
+    obs = env.compute_obs(mjx.device_put(mj_data), info)
 
     # Load the saved policy
     print("Loading policy ...")
@@ -159,14 +159,13 @@ def test(start_angle=0.0):
             step_start = time.time()
             act_rng, rng = jax.random.split(rng)
 
-            print("|z|: ", jnp.linalg.norm(z))
+            print("|z|: ", jnp.linalg.norm(info["z"]))
 
             # Apply the policy
             act, _ = jit_policy(obs, act_rng)
-            z = act[:nz]
-            u = act[nz:]
-            mj_data.ctrl[:] = u
-            obs = env.compute_obs(mjx.device_put(mj_data), {"z": z})
+            mj_data.ctrl[:] = act[nz:]
+            obs = env.compute_obs(mjx.device_put(mj_data), info)
+            info["z"] = act[:nz]
 
             # Step the simulation
             for _ in range(env._physics_steps_per_control_step):

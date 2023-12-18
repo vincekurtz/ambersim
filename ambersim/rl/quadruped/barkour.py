@@ -268,6 +268,11 @@ class BarkourEnv(MjxEnv):
         state = state.replace(pipeline_state=data, obs=obs + obs_noise, reward=reward, done=done * 1.0)
         return state
 
+    def compute_obs(self, data: mjx.Data, info: Dict[str, Any]) -> jax.Array:
+        """Computes the observation from the state. See parent docstring."""
+        x, xd = self._pos_vel(data)
+        return self._get_obs(data.qpos, x, xd, info)
+
     def _get_obs(self, qpos: jax.Array, x: Transform, xd: Motion, state_info: Dict[str, Any]) -> jax.Array:
         # Get observations:
         # yaw_rate,  projected_gravity, command,  motor_angles, last_action
