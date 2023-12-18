@@ -30,9 +30,9 @@ https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/mjx/tu
 def train():
     """Train a quadruped barkour agent."""
     # Observation, action, and lifted state sizes for the controller system
-    ny = 31
+    ny = 15
     nu = 12
-    nz = 10
+    nz = 30
 
     # Initialize the environment
     envs.register_environment("barkour", lambda *args: RecurrentWrapper(BarkourEnv(*args), nz=nz))
