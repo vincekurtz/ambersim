@@ -49,27 +49,27 @@ def train():
         action_distribution=NormalTanhDistribution,
     )
 
-    num_timesteps = 60_000_000
+    num_timesteps = 100_000_000
     eval_every = 1_000_000
 
     # Define the training function
     train_fn = functools.partial(
         ppo.train,
-        num_timesteps=60_000_000,
+        num_timesteps=num_timesteps,
         num_evals=num_timesteps // eval_every,
-        reward_scaling=1,
+        reward_scaling=0.1,
         episode_length=1000,
         normalize_observations=True,
         action_repeat=1,
-        unroll_length=20,
-        num_minibatches=8,
+        unroll_length=10,
+        num_minibatches=32,
         gae_lambda=0.95,
-        num_updates_per_batch=4,
-        discounting=0.99,
+        num_updates_per_batch=8,
+        discounting=0.97,
         learning_rate=3e-4,
-        entropy_cost=1e-5,
-        num_envs=4096,
-        batch_size=1024,
+        entropy_cost=1e-4,
+        num_envs=1024,
+        batch_size=512,
         network_factory=network_wrapper.make_ppo_networks,
         clipping_epsilon=0.2,
         num_resets_per_eval=10,

@@ -1,5 +1,9 @@
+from typing import Any, Dict
+
 import jax
 import jax.numpy as jnp
+
+from mujoco import mjx
 
 from ambersim.rl.base import MjxEnv, State
 
@@ -83,6 +87,20 @@ class RecurrentWrapper(MjxEnv):
         state.info["z"] = z
         # state.metrics["reward"] = reward
         return state
+    
+    def compute_obs(self, data: mjx.Data, info: Dict[str, Any]) -> jax.Array:
+        """Observes the environment based on the system State. May modify state in place.
+
+        Args:
+            data: The physics state.
+            info: Auxiliary info from the State.
+
+        Returns:
+            obs: the observation.
+        """
+        y = self.env.compute_obs(data, info)
+        z = info["z"]
+        return jnp.concatenate([z, y])
 
     @property
     def dt(self) -> jax.Array:
@@ -98,3 +116,13 @@ class RecurrentWrapper(MjxEnv):
     def action_size(self) -> int:
         """The size of the action."""
         return self.env.action_size + self.nz
+    
+    @property
+    def model(self) -> mjx.Model:
+        """The MuJoCo model."""
+        return self.env.model
+    
+    @property
+    def _physics_steps_per_control_step(self) -> int:
+        """The number of physics steps per control step."""
+        return self.env._physics_steps_per_control_step

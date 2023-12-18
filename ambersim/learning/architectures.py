@@ -358,7 +358,7 @@ class LiftedInputLinearSystemPolicy(nn.Module):
     def setup(self):
         """Initialize the network."""
         # Linear map
-        self.A = self.param("A", nn.initializers.lecun_normal(), (self.nz, self.nz))
+        self.A = self.param("A", nn.initializers.zeros, (self.nz, self.nz))
         self.C = self.param("C", nn.initializers.lecun_normal(), (self.nu, self.nz))
         self.D = self.param("D", nn.initializers.lecun_normal(), (self.nu, self.ny))
 
