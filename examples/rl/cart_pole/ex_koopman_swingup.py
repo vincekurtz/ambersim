@@ -11,6 +11,7 @@ import mujoco.viewer
 import numpy as np
 from brax import envs
 from brax.io import model
+from brax.training.acme import running_statistics
 from brax.training.agents.ppo import train as ppo
 from brax.training.agents.ppo.networks import make_inference_fn
 from mujoco import mjx
@@ -43,7 +44,8 @@ def train():
     nu = 1  # control input is [cart_force]
     # policy_network = MLP(layer_sizes=[128, 128, 2 * (nz + nu)])
     # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
-    policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [128, 128, nz]})
+    # policy_network = BilinearSystemPolicy(nz=nz, ny=ny, nu=nu)
+    policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [16, 16, nz]})
 
     value_network = MLP(layer_sizes=[256, 256, 1])
     network_wrapper = BraxPPONetworksWrapper(
@@ -53,7 +55,7 @@ def train():
     )
 
     # Set the number of training steps and evaluations
-    num_timesteps = 5_000_000
+    num_timesteps = 20_000_000
     eval_every = 100_000
 
     # Create the PPO agent
@@ -64,7 +66,7 @@ def train():
         num_evals=num_timesteps // eval_every,
         episode_length=200,
         reward_scaling=0.1,
-        normalize_observations=False,
+        normalize_observations=True,
         action_repeat=1,
         unroll_length=10,
         num_minibatches=64,
@@ -144,6 +146,7 @@ def test(start_angle=0.0):
     ppo_networks = network_wrapper.make_ppo_networks(
         observation_size=env.observation_size,
         action_size=env.action_size,
+        preprocess_observations_fn=running_statistics.normalize,
     )
     make_policy = make_inference_fn(ppo_networks)
     policy = make_policy(params, deterministic=True)
@@ -160,11 +163,10 @@ def test(start_angle=0.0):
 
             # Apply the policy
             act, _ = jit_policy(obs, act_rng)
-            z_next = act[:nz]
+            z = act[:nz]
             u = act[nz:]
             mj_data.ctrl[:] = u
             obs = env.compute_obs(mjx.device_put(mj_data), {"z": z})
-            z = z_next
 
             # Step the simulation
             for _ in range(env._physics_steps_per_control_step):
