@@ -16,7 +16,7 @@ from brax.training.agents.ppo.networks import make_inference_fn
 from mujoco import mjx
 from tensorboardX import SummaryWriter
 
-from ambersim.learning.architectures import MLP, BilinearSystemPolicy, LinearSystemPolicy, LiftedInputLinearSystemPolicy
+from ambersim.learning.architectures import MLP, BilinearSystemPolicy, LiftedInputLinearSystemPolicy, LinearSystemPolicy
 from ambersim.learning.distributions import NormalDistribution
 from ambersim.rl.cart_pole.swingup import CartPoleSwingupEnv
 from ambersim.rl.env_wrappers import RecurrentWrapper
@@ -41,9 +41,9 @@ def train():
     print("Creating policy network...")
     ny = 5  # observations are [cart_pos, cos(theta), sin(theta), cart_vel, dtheta]
     nu = 1  # control input is [cart_force]
-    policy_network = MLP(layer_sizes=[128, 128, 2*(nz + nu)])
-    #policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
-    #policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu
+    # policy_network = MLP(layer_sizes=[128, 128, 2 * (nz + nu)])
+    policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
+    # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu
     #                                               phi_kwargs={'layer_sizes': [128, 128, 2*(nz + nu)]})
 
     value_network = MLP(layer_sizes=[256, 256, 1])
@@ -122,7 +122,7 @@ def test(start_angle=0.0):
     # Create an environment for evaluation
     print("Creating test environment...")
     nz = 10
-    envs.register_environment("cart_pole",  lambda *args: RecurrentWrapper(CartPoleSwingupEnv(*args), nz=nz))
+    envs.register_environment("cart_pole", lambda *args: RecurrentWrapper(CartPoleSwingupEnv(*args), nz=nz))
     env = envs.get_environment("cart_pole")
     mj_model = env.model
     mj_data = mujoco.MjData(mj_model)
@@ -156,7 +156,7 @@ def test(start_angle=0.0):
         while viewer.is_running():
             step_start = time.time()
             act_rng, rng = jax.random.split(rng)
-            
+
             print("|z|: ", jnp.linalg.norm(z))
 
             # Apply the policy
