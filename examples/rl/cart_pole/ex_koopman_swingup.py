@@ -42,9 +42,8 @@ def train():
     ny = 5  # observations are [cart_pos, cos(theta), sin(theta), cart_vel, dtheta]
     nu = 1  # control input is [cart_force]
     # policy_network = MLP(layer_sizes=[128, 128, 2 * (nz + nu)])
-    policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
-    # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu
-    #                                               phi_kwargs={'layer_sizes': [128, 128, 2*(nz + nu)]})
+    # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
+    policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [128, 128, nz]})
 
     value_network = MLP(layer_sizes=[256, 256, 1])
     network_wrapper = BraxPPONetworksWrapper(
@@ -54,7 +53,7 @@ def train():
     )
 
     # Set the number of training steps and evaluations
-    num_timesteps = 50_000_000
+    num_timesteps = 5_000_000
     eval_every = 100_000
 
     # Create the PPO agent
