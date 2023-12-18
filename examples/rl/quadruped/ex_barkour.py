@@ -29,15 +29,18 @@ https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/mjx/tu
 
 def train():
     """Train a quadruped barkour agent."""
+    # Observation, action, and lifted state sizes for the controller system
+    ny = 31
+    nu = 12
+    nz = 10
+
     # Initialize the environment
-    envs.register_environment("barkour", BarkourEnv)
+    envs.register_environment("barkour", lambda *args: RecurrentWrapper(BarkourEnv(*args), nz=nz))
     env = envs.get_environment("barkour")
 
-    print(env.observation_size, env.action_size)
-
-
     # Create policy and value networks
-    policy_network = MLP(layer_sizes=(128, 128, 2 * env.action_size))
+    policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
+    # policy_network = MLP(layer_sizes=(128, 128, 2 * env.action_size))
     value_network = MLP(layer_sizes=(256, 256, 1))
 
     network_wrapper = BraxPPONetworksWrapper(

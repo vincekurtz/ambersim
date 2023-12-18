@@ -76,12 +76,12 @@ class RecurrentWrapper(MjxEnv):
         obs = jnp.concatenate([z, env_state.obs])
 
         # Modify the reward to include a cost on the hidden state
-        reward = env_state.reward  # - self.z_cost_weight * jnp.square(z).sum()
+        reward = env_state.reward - self.z_cost_weight * jnp.square(z).sum()
 
         # Update the state
         state = env_state.replace(obs=obs, reward=reward)
         state.info["z"] = z
-        state.metrics["reward"] = reward
+        # state.metrics["reward"] = reward
         return state
 
     @property
