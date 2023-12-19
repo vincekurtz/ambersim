@@ -1,5 +1,6 @@
 from typing import Any, Dict
 
+import brax
 import jax
 import jax.numpy as jnp
 from mujoco import mjx

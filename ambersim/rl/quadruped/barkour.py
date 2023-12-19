@@ -75,6 +75,9 @@ class BarkourConfig:
     # Time steps to take before terminating the episode
     reset_horizon = 500
 
+    # Number of observations to stack through time
+    obs_hist_len = 1
+
 
 class BarkourEnv(MjxEnv):
     """Environment for training a quadruped to walk over flat ground.
@@ -148,7 +151,7 @@ class BarkourEnv(MjxEnv):
             "command": new_cmd,
             "last_contact": jnp.zeros(4, dtype=bool),
             "feet_air_time": jnp.zeros(4),
-            "obs_history": jnp.zeros(15),  # just one step of history
+            "obs_history": jnp.zeros(31 * self.config.obs_hist_len),
             "reward_tuple": {
                 "tracking_lin_vel": 0.0,
                 "tracking_ang_vel": 0.0,
@@ -277,22 +280,22 @@ class BarkourEnv(MjxEnv):
         # Get observations:
         # yaw_rate,  projected_gravity, command,  motor_angles, last_action
 
-        # inv_base_orientation = math.quat_inv(x.rot[0])
-        # local_rpyrate = math.rotate(xd.ang[0], inv_base_orientation)
+        inv_base_orientation = math.quat_inv(x.rot[0])
+        local_rpyrate = math.rotate(xd.ang[0], inv_base_orientation)
         cmd = state_info["command"]
 
         obs_list = []
         # yaw rate
-        # obs_list.append(jnp.array([local_rpyrate[2]]) * 0.25)
+        obs_list.append(jnp.array([local_rpyrate[2]]) * 0.25)
         # projected gravity
-        # obs_list.append(math.rotate(jnp.array([0.0, 0.0, -1.0]), inv_base_orientation))
+        obs_list.append(math.rotate(jnp.array([0.0, 0.0, -1.0]), inv_base_orientation))
         # command
         obs_list.append(cmd * jnp.array([2.0, 2.0, 0.25]))
         # motor angles
         angles = qpos[7:19]
         obs_list.append(angles - self._default_ap_pose)
         # last action
-        # obs_list.append(state_info["last_act"])
+        obs_list.append(state_info["last_act"])
 
         obs = jnp.clip(jnp.concatenate(obs_list), -100.0, 100.0)
 

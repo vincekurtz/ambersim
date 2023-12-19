@@ -34,17 +34,19 @@ https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/mjx/tu
 def train():
     """Train a quadruped barkour agent."""
     # Observation, action, and lifted state sizes for the controller system
-    ny = 15
+    ny = 31
     nu = 12
-    nz = 0
+    nz = 16
 
     # Initialize the environment
     envs.register_environment("barkour", lambda *args: RecurrentWrapper(BarkourEnv(*args), nz=nz))
+    # envs.register_environment("barkour", BarkourEnv)
     env = envs.get_environment("barkour")
 
     # Create policy and value networks
-    # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
-    policy_network = MLP(layer_sizes=[128, 128, 2 * (nz + nu)])
+    policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
+    # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [16, 16, nz]})
+    # policy_network = MLP(layer_sizes=[128, 128, 2 * (nz + nu)])
     value_network = MLP(layer_sizes=(256, 256, 1))
 
     network_wrapper = BraxPPONetworksWrapper(
@@ -55,6 +57,47 @@ def train():
 
     num_timesteps = 60_000_000
     eval_every = 1_000_000
+
+    # Domain randomization function
+    def domain_randomize(sys, rng):
+        """Randomize over friction and actuator gains."""
+
+        @jax.vmap
+        def rand(rng):
+            _, key = jax.random.split(rng, 2)
+            # friction
+            friction = jax.random.uniform(key, (1,), minval=0.6, maxval=1.4)
+            friction = sys.geom_friction.at[:, 0].set(friction)
+            # actuator
+            _, key = jax.random.split(key, 2)
+            gain_range = (-10, -5)
+            param = (
+                jax.random.uniform(key, (1,), minval=gain_range[0], maxval=gain_range[1]) + sys.actuator_gainprm[:, 0]
+            )
+            gain = sys.actuator_gainprm.at[:, 0].set(param)
+            bias = sys.actuator_biasprm.at[:, 1].set(-param)
+            return friction, gain, bias
+
+        friction, gain, bias = rand(rng)
+
+        in_axes = jax.tree_map(lambda x: None, sys)
+        in_axes = in_axes.tree_replace(
+            {
+                "geom_friction": 0,
+                "actuator_gainprm": 0,
+                "actuator_biasprm": 0,
+            }
+        )
+
+        sys = sys.tree_replace(
+            {
+                "geom_friction": friction,
+                "actuator_gainprm": gain,
+                "actuator_biasprm": bias,
+            }
+        )
+
+        return sys, in_axes
 
     # Define the training function
     train_fn = functools.partial(
@@ -72,11 +115,12 @@ def train():
         discounting=0.97,
         learning_rate=3e-4,
         entropy_cost=1e-4,
-        num_envs=1024,
-        batch_size=512,
+        num_envs=8192,
+        batch_size=1024,
         network_factory=network_wrapper.make_ppo_networks,
-        clipping_epsilon=0.2,
+        clipping_epsilon=0.3,
         num_resets_per_eval=10,
+        # randomization_fn=domain_randomize,
         seed=0,
     )
 
@@ -178,5 +222,5 @@ def test():
 
 
 if __name__ == "__main__":
-    # train()
-    test()
+    train()
+    # test()
