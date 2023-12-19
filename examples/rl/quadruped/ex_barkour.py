@@ -36,27 +36,24 @@ def train():
     # Observation, action, and lifted state sizes for the controller system
     ny = 31
     nu = 12
-    nz = 16
+    nz = 0
 
     # Initialize the environment
-    envs.register_environment("barkour", lambda *args: RecurrentWrapper(BarkourEnv(*args), nz=nz))
-    # envs.register_environment("barkour", BarkourEnv)
+    # envs.register_environment("barkour", lambda *args: RecurrentWrapper(BarkourEnv(*args), nz=nz))
+    envs.register_environment("barkour", BarkourEnv)
     env = envs.get_environment("barkour")
 
     # Create policy and value networks
-    policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
+    # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
     # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [16, 16, nz]})
-    # policy_network = MLP(layer_sizes=[128, 128, 2 * (nz + nu)])
-    value_network = MLP(layer_sizes=(256, 256, 1))
+    policy_network = MLP(layer_sizes=[32, 32, 32, 32, 2 * nu])
+    value_network = MLP(layer_sizes=(128, 128, 128, 128, 128, 1))
 
     network_wrapper = BraxPPONetworksWrapper(
         policy_network=policy_network,
         value_network=value_network,
         action_distribution=NormalTanhDistribution,
     )
-
-    num_timesteps = 60_000_000
-    eval_every = 1_000_000
 
     # Domain randomization function
     def domain_randomize(sys, rng):
@@ -98,29 +95,32 @@ def train():
         )
 
         return sys, in_axes
+    
+    num_timesteps = 60_000_000
+    eval_every = 1_000_000
 
     # Define the training function
     train_fn = functools.partial(
         ppo.train,
         num_timesteps=num_timesteps,
         num_evals=num_timesteps // eval_every,
-        reward_scaling=0.1,
+        reward_scaling=1,
         episode_length=1000,
         normalize_observations=True,
         action_repeat=1,
-        unroll_length=10,
-        num_minibatches=32,
+        unroll_length=20,
+        num_minibatches=8,
         gae_lambda=0.95,
-        num_updates_per_batch=8,
-        discounting=0.97,
+        num_updates_per_batch=4,
+        discounting=0.99,
         learning_rate=3e-4,
-        entropy_cost=1e-4,
+        entropy_cost=1e-2,
         num_envs=8192,
         batch_size=1024,
         network_factory=network_wrapper.make_ppo_networks,
         clipping_epsilon=0.3,
         num_resets_per_eval=10,
-        # randomization_fn=domain_randomize,
+        randomization_fn=domain_randomize,
         seed=0,
     )
 

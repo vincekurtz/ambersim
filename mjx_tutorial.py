@@ -324,7 +324,7 @@ class BarkourEnv(MjxEnv):
         'command': new_cmd,
         'last_contact': jp.zeros(4, dtype=bool),
         'feet_air_time': jp.zeros(4),
-        'obs_history': jp.zeros(15 * 31),
+        'obs_history': jp.zeros(30 * 31),  # each obs has 31 elements
         'reward_tuple': {
             'tracking_lin_vel': 0.0,
             'tracking_ang_vel': 0.0,
@@ -608,10 +608,25 @@ renderer = mujoco.Renderer(env.model)
 
 To train a policy with domain randomization, we pass in the domain randomization function into the brax train function; brax will call the domain randomization function when rolling out episodes. Training the quadruped takes about 14 minutes on a Tesla V100 GPU.
 """
+from ambersim.learning.architectures import MLP
+from brax.training import distribution
+from ambersim.rl.helpers import BraxPPONetworksWrapper
+import flax.linen as nn
 
-make_networks_factory = functools.partial(
-    ppo_networks.make_ppo_networks,
-        policy_hidden_layer_sizes=(128, 128, 128, 128))
+
+# policy_network = MLP(layer_sizes=(128,128,128,128,2*12))
+policy_network = nn.Dense(24, use_bias=False, name='policy')
+value_network = MLP(layer_sizes=(256,256,256,256,256,1))
+
+network_wrapper = BraxPPONetworksWrapper(
+    policy_network=policy_network,
+    value_network=value_network,
+    action_distribution=distribution.NormalTanhDistribution,
+)
+
+#make_networks_factory = functools.partial(
+#    ppo_networks.make_ppo_networks,
+#        policy_hidden_layer_sizes=(128, 128, 128, 128))
 train_fn = functools.partial(
       ppo.train,
       num_timesteps=60_000_000, num_evals=3, reward_scaling=1,
@@ -619,7 +634,7 @@ train_fn = functools.partial(
       action_repeat=1, unroll_length=20, num_minibatches=8, gae_lambda=0.95,
       num_updates_per_batch=4, discounting=0.99, learning_rate=3e-4,
       entropy_cost=1e-2, num_envs=8192, batch_size=1024,
-      network_factory=make_networks_factory,
+      network_factory=network_wrapper.make_ppo_networks,
       num_resets_per_eval=10,
       randomization_fn=domain_randomize, seed=0)
 

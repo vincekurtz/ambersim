@@ -14,7 +14,7 @@ from brax.training.agents.ppo import train as ppo
 from mujoco import mjx
 from tensorboardX import SummaryWriter
 
-from ambersim.learning.architectures import MLP, LinearSystemPolicy
+from ambersim.learning.architectures import MLP, LinearSystemPolicy, BilinearSystemPolicy, LiftedInputLinearSystemPolicy
 from ambersim.learning.distributions import NormalDistribution
 from ambersim.rl.env_wrappers import RecurrentWrapper
 from ambersim.rl.helpers import BraxPPONetworksWrapper
@@ -29,7 +29,7 @@ Perform pendulum swingup training with a Koopman linear system policy.
 def train_swingup():
     """Train a pendulum swingup agent with custom network architectures."""
     # Choose the dimension of the lifted state for the controller system
-    nz = 10
+    nz = 32
 
     # Initialize the environment with a recurrent wrapper
     envs.register_environment("pendulum_swingup", lambda *args: RecurrentWrapper(PendulumSwingupEnv(*args), nz=nz))
@@ -39,6 +39,9 @@ def train_swingup():
     # It outputs [z_next, u, σ(z_next), σ(u)]: the next lifted state, control input,
     # and their standard deviations.
     policy_network = LinearSystemPolicy(nz=nz, ny=3, nu=1)
+    # policy_network = BilinearSystemPolicy(nz=nz, ny=3, nu=1)
+    # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=3, nu=1, phi_kwargs={"layer_sizes": (16, 16, nz)})
+    # policy_network = MLP(layer_sizes=(32, 32, 2*(1+nz)))
 
     # Value network takes as input observations and the current lifted state,
     # and outputs a scalar value.

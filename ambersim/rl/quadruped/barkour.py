@@ -76,7 +76,7 @@ class BarkourConfig:
     reset_horizon = 500
 
     # Number of observations to stack through time
-    obs_hist_len = 1
+    obs_hist_len = 15
 
 
 class BarkourEnv(MjxEnv):
