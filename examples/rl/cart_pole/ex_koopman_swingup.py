@@ -32,7 +32,7 @@ Perform cart-pole swingup with a Koopman linear system policy.
 def train():
     """Train a policy to swing up the cart-pole, then save the trained policy."""
     # Choose the dimension of the lifted state for the controller system
-    nz = 10
+    nz = 32
 
     print("Creating cart-pole environment...")
     envs.register_environment("cart_pole", lambda *args: RecurrentWrapper(CartPoleSwingupEnv(*args), nz=nz))
@@ -40,11 +40,11 @@ def train():
 
     # Create the policy and value networks
     print("Creating policy network...")
-    ny = 20  # observations are [cart_pos, cos(theta), sin(theta), cart_vel, dtheta]
+    ny = 20  # observations are degree-2 polynomials of [cart_pos, cos(theta), sin(theta), cart_vel, theta_dot]
     nu = 1  # control input is [cart_force]
     # policy_network = MLP(layer_sizes=[128, 128, 2 * (nz + nu)])
-    policy_network = MLP(layer_sizes=[2 * (nz + nu)], bias=False)
-    # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
+    # policy_network = MLP(layer_sizes=[2 * (nz + nu)], bias=False)
+    policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
     # policy_network = BilinearSystemPolicy(nz=nz, ny=ny, nu=nu)
     # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [16, 16, nz]})
 
@@ -123,7 +123,7 @@ def test(start_angle=0.0):
     """Load a trained policy and run a little sim with it."""
     # Create an environment for evaluation
     print("Creating test environment...")
-    nz = 10
+    nz = 32
     envs.register_environment("cart_pole", lambda *args: RecurrentWrapper(CartPoleSwingupEnv(*args), nz=nz))
     env = envs.get_environment("cart_pole")
     mj_model = env.model

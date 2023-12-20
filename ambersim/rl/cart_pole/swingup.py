@@ -24,25 +24,23 @@ class CartPoleSwingupConfig:
     # Reward function coefficients
     upright_angle_cost: float = 1.0
     center_cart_cost: float = 0.01
-    velocity_cost: float = 0.01
-    control_cost: float = 0.001
+    velocity_cost: float = 0.1
+    control_cost: float = 0.01
 
     # Ranges for sampling initial conditions
     pos_hi: float = 0
     pos_lo: float = -0
-    # theta_hi: float = jnp.pi
-    # theta_lo: float = -jnp.pi
-    theta_hi: float = 0.001
-    theta_lo: float = -0.001
-    qvel_hi: float = 0.001
-    qvel_lo: float = -0.001
+    theta_hi: float = jnp.pi
+    theta_lo: float = -jnp.pi
+    qvel_hi: float = 0.1
+    qvel_lo: float = -0.1
 
 
 class CartPoleSwingupEnv(MjxEnv):
     """Environment for training a cart-pole swingup task.
 
     States: x = (pos, theta, vel, dtheta), shape=(4,)
-    Observations: y = (pos, cos(theta), sin(theta), vel, dtheta), shape=(5,)
+    Observations: y = (pos, cos(theta), sin(theta), vel, dtheta, + polynomials thereof), shape=(20,)
     Actions: a = tau, the force on the cart, shape=(1,)
     """
 
