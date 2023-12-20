@@ -40,14 +40,15 @@ def train():
 
     # Create the policy and value networks
     print("Creating policy network...")
-    ny = 5  # observations are [cart_pos, cos(theta), sin(theta), cart_vel, dtheta]
+    ny = 20  # observations are [cart_pos, cos(theta), sin(theta), cart_vel, dtheta]
     nu = 1  # control input is [cart_force]
     # policy_network = MLP(layer_sizes=[128, 128, 2 * (nz + nu)])
+    policy_network = MLP(layer_sizes=[2 * (nz + nu)], bias=False)
     # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
     # policy_network = BilinearSystemPolicy(nz=nz, ny=ny, nu=nu)
-    policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [16, 16, nz]})
+    # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [16, 16, nz]})
 
-    value_network = MLP(layer_sizes=[256, 256, 1])
+    value_network = MLP(layer_sizes=[128, 128, 1])
     network_wrapper = BraxPPONetworksWrapper(
         policy_network=policy_network,
         value_network=value_network,
@@ -55,7 +56,7 @@ def train():
     )
 
     # Set the number of training steps and evaluations
-    num_timesteps = 5_000_000
+    num_timesteps = 10_000_000
     eval_every = 100_000
 
     # Create the PPO agent
@@ -76,7 +77,7 @@ def train():
         entropy_cost=1e-5,
         num_envs=1024,
         batch_size=512,
-        clipping_epsilon=0.2,
+        clipping_epsilon=0.3,
         network_factory=network_wrapper.make_ppo_networks,
         seed=0,
     )

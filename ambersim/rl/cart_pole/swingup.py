@@ -24,16 +24,18 @@ class CartPoleSwingupConfig:
     # Reward function coefficients
     upright_angle_cost: float = 1.0
     center_cart_cost: float = 0.01
-    velocity_cost: float = 0.001
+    velocity_cost: float = 0.01
     control_cost: float = 0.001
 
     # Ranges for sampling initial conditions
-    pos_hi: float = 1
-    pos_lo: float = -1
-    theta_hi: float = jnp.pi
-    theta_lo: float = -jnp.pi
-    qvel_hi: float = 0.1
-    qvel_lo: float = -0.1
+    pos_hi: float = 0
+    pos_lo: float = -0
+    # theta_hi: float = jnp.pi
+    # theta_lo: float = -jnp.pi
+    theta_hi: float = 0.001
+    theta_lo: float = -0.001
+    qvel_hi: float = 0.001
+    qvel_lo: float = -0.001
 
 
 class CartPoleSwingupEnv(MjxEnv):
@@ -58,9 +60,35 @@ class CartPoleSwingupEnv(MjxEnv):
 
     def compute_obs(self, data: mjx.Data, info: Dict[str, Any]) -> jax.Array:
         """Computes the observation from the state. See parent docstring."""
-        theta = data.qpos[1]
-        dtheta = data.qvel[1]
-        return jnp.array([data.qpos[0], jnp.cos(theta), jnp.sin(theta), data.qvel[0], dtheta])
+        p = data.qpos[0]
+        s = jnp.sin(data.qpos[1])
+        c = jnp.cos(data.qpos[1])
+        pd = data.qvel[0]
+        td = data.qvel[1]
+        return jnp.array(
+            [
+                p,
+                c,
+                s,
+                pd,
+                td,
+                p**2,
+                c**2,
+                s**2,
+                pd**2,
+                td**2,
+                p * c,
+                p * s,
+                p * pd,
+                p * td,
+                c * s,
+                c * pd,
+                c * td,
+                s * pd,
+                s * td,
+                pd * td,
+            ]
+        )
 
     def compute_reward(self, data: mjx.Data, info: Dict[str, Any]) -> jax.Array:
         """Computes the reward from the state. See parent docstring."""
