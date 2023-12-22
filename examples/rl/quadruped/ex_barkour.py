@@ -41,13 +41,12 @@ def train():
     # Initialize the environment
     # envs.register_environment("barkour", lambda *args: RecurrentWrapper(BarkourEnv(*args), nz=nz))
     envs.register_environment("barkour", BarkourEnv)
-    env = envs.get_environment("barkour")
 
     # Create policy and value networks
     # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
     # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [16, 16, nz]})
-    policy_network = MLP(layer_sizes=[32, 32, 32, 32, 2 * nu])
-    value_network = MLP(layer_sizes=(128, 128, 128, 128, 128, 1))
+    policy_network = MLP(layer_sizes=(128,) * 4 + (2 * nu,))
+    value_network = MLP(layer_sizes=(256,) * 5 + (1,))
 
     network_wrapper = BraxPPONetworksWrapper(
         policy_network=policy_network,
@@ -95,15 +94,12 @@ def train():
         )
 
         return sys, in_axes
-    
-    num_timesteps = 60_000_000
-    eval_every = 1_000_000
 
     # Define the training function
     train_fn = functools.partial(
         ppo.train,
-        num_timesteps=num_timesteps,
-        num_evals=num_timesteps // eval_every,
+        num_timesteps=6_000,
+        num_evals=3,
         reward_scaling=1,
         episode_length=1000,
         normalize_observations=True,
@@ -141,11 +137,16 @@ def train():
                 val = float(val)
             writer.add_scalar(key, val, num_steps)
 
-    # Do the training
+    # Do the training. Note that for some reason it seems essential to have a separate
+    # evaluation environment when using domain randomization.
+    env = envs.get_environment("barkour")
+    eval_env = envs.get_environment("barkour")
+
     print("Training...")
     _, params, _ = train_fn(
         environment=env,
         progress_fn=progress,
+        eval_env=eval_env,
     )
 
     print(f"Time to jit: {times[1] - times[0]}")
@@ -164,16 +165,15 @@ def test():
     """Load a trained policy and run a little sim with it."""
     # Create an environment for evaluation
     print("Creating test environment...")
-    nz = 0
-    envs.register_environment("barkour", lambda *args: RecurrentWrapper(BarkourEnv(*args), nz=nz))
+    envs.register_environment("barkour", BarkourEnv)
     env = envs.get_environment("barkour")
     mj_model = env.model
     mj_data = mujoco.MjData(mj_model)
 
     # Set the command and initial state
     mj_data.qpos = mj_model.keyframe("standing").qpos
-    info = {"z": jnp.zeros(nz), "obs_history": jnp.zeros(15), "command": jnp.array([0.0, 0.0, 0.0])}  # vx, vy, yaw rate
-    obs = env.compute_obs(mjx.device_put(mj_data), info)
+    state = env.reset(jax.random.PRNGKey(0))
+    obs = env.compute_obs(mjx.device_put(mj_data), state.info)
 
     # Load the saved policy
     print("Loading policy ...")
@@ -201,13 +201,10 @@ def test():
             step_start = time.time()
             act_rng, rng = jax.random.split(rng)
 
-            print("|z|: ", jnp.linalg.norm(info["z"]))
-
             # Apply the policy
             act, _ = jit_policy(obs, act_rng)
-            mj_data.ctrl[:] = act[nz:]
-            obs = env.compute_obs(mjx.device_put(mj_data), info)
-            info["z"] = act[:nz]
+            mj_data.ctrl[:] = act
+            obs = env.compute_obs(mjx.device_put(mj_data), state.info)
 
             # Step the simulation
             for _ in range(env._physics_steps_per_control_step):
@@ -222,5 +219,5 @@ def test():
 
 
 if __name__ == "__main__":
-    train()
-    # test()
+    # train()
+    test()
