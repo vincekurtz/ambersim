@@ -35,7 +35,7 @@ def train():
     nz = 32
 
     print("Creating cart-pole environment...")
-    envs.register_environment("cart_pole", lambda *args: RecurrentWrapper(CartPoleSwingupEnv(*args), nz=nz))
+    envs.register_environment("cart_pole", RecurrentWrapper.env_factory(CartPoleSwingupEnv, nz=nz))
     env = envs.get_environment("cart_pole")
 
     # Create the policy and value networks
@@ -124,7 +124,7 @@ def test(start_angle=0.0):
     # Create an environment for evaluation
     print("Creating test environment...")
     nz = 32
-    envs.register_environment("cart_pole", lambda *args: RecurrentWrapper(CartPoleSwingupEnv(*args), nz=nz))
+    envs.register_environment("cart_pole", RecurrentWrapper.env_factory(CartPoleSwingupEnv, nz=nz))
     env = envs.get_environment("cart_pole")
     mj_model = env.model
     mj_data = mujoco.MjData(mj_model)

@@ -26,6 +26,24 @@ class RecurrentWrapper(MjxEnv):
     and allows us to use Brax's existing RL algorithms like PPO.
     """
 
+    @staticmethod
+    def env_factory(env: MjxEnv, nz: int, z_cost_weight: float = 1e-4) -> MjxEnv:
+        """Create a function that returns a recurrent wrapper around the given environment.
+
+        Args:
+            env: the underlying environment we want to wrap
+            nz: the size of the hidden state
+            z_cost_weight: the weight on penalizing |z|^2
+
+        Returns:
+            make_env: a function that returns a wrapped MjxEnv
+        """
+
+        def make_env(*args) -> MjxEnv:
+            return RecurrentWrapper(env(*args), nz=nz, z_cost_weight=z_cost_weight)
+
+        return make_env
+
     def __init__(self, env: MjxEnv, nz: int, z_cost_weight: float = 1e-4) -> None:
         """Initialize the environment.
 

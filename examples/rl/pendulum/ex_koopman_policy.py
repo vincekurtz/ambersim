@@ -14,7 +14,7 @@ from brax.training.agents.ppo import train as ppo
 from mujoco import mjx
 from tensorboardX import SummaryWriter
 
-from ambersim.learning.architectures import MLP, LinearSystemPolicy, BilinearSystemPolicy, LiftedInputLinearSystemPolicy
+from ambersim.learning.architectures import MLP, BilinearSystemPolicy, LiftedInputLinearSystemPolicy, LinearSystemPolicy
 from ambersim.learning.distributions import NormalDistribution
 from ambersim.rl.env_wrappers import RecurrentWrapper
 from ambersim.rl.helpers import BraxPPONetworksWrapper
@@ -32,7 +32,7 @@ def train_swingup():
     nz = 32
 
     # Initialize the environment with a recurrent wrapper
-    envs.register_environment("pendulum_swingup", lambda *args: RecurrentWrapper(PendulumSwingupEnv(*args), nz=nz))
+    envs.register_environment("pendulum_swingup", RecurrentWrapper.env_factory(PendulumSwingupEnv, nz=nz))
     env = envs.get_environment("pendulum_swingup")
 
     # Policy network takes as input [z, y]: the current lifted state and observations.
