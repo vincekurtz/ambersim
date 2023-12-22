@@ -53,6 +53,7 @@ class RecurrentWrapper(MjxEnv):
             z_cost_weight: the weight on penalizing |z|^2
         """
         self.env = env
+        self.sys = self.env.sys
         self.nz = nz
         self.z_cost_weight = z_cost_weight
 

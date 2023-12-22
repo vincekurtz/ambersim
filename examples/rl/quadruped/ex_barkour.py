@@ -1,6 +1,7 @@
 import functools
 import pickle
 import time
+import sys
 from datetime import datetime
 
 import jax
@@ -36,17 +37,18 @@ def train():
     # Observation, action, and lifted state sizes for the controller system
     ny = 31
     nu = 12
-    nz = 0
+    nz = 32
 
     # Initialize the environment
-    # envs.register_environment("barkour", lambda *args: RecurrentWrapper(BarkourEnv(*args), nz=nz))
-    envs.register_environment("barkour", BarkourEnv)
+    envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
+    # envs.register_environment("barkour", BarkourEnv)
 
     # Create policy and value networks
-    # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
+    policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
     # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [16, 16, nz]})
-    policy_network = MLP(layer_sizes=(128,) * 4 + (2 * nu,))
-    value_network = MLP(layer_sizes=(256,) * 5 + (1,))
+    # policy_network = MLP(layer_sizes=(128,) * 2 + (2 * nu,))
+
+    value_network = MLP(layer_sizes=(256,) * 2 + (1,))
 
     network_wrapper = BraxPPONetworksWrapper(
         policy_network=policy_network,
@@ -94,12 +96,15 @@ def train():
         )
 
         return sys, in_axes
+    
+    num_timesteps = 60_000_000
+    eval_every = 100_000
 
     # Define the training function
     train_fn = functools.partial(
         ppo.train,
-        num_timesteps=6_000,
-        num_evals=3,
+        num_timesteps=num_timesteps,
+        num_evals=num_timesteps // eval_every,
         reward_scaling=1,
         episode_length=1000,
         normalize_observations=True,
@@ -110,11 +115,11 @@ def train():
         num_updates_per_batch=4,
         discounting=0.99,
         learning_rate=3e-4,
-        entropy_cost=1e-2,
+        entropy_cost=1e-4,
         num_envs=8192,
         batch_size=1024,
         network_factory=network_wrapper.make_ppo_networks,
-        clipping_epsilon=0.3,
+        clipping_epsilon=0.2,
         num_resets_per_eval=10,
         randomization_fn=domain_randomize,
         seed=0,
@@ -173,6 +178,7 @@ def test():
     # Set the command and initial state
     mj_data.qpos = mj_model.keyframe("standing").qpos
     state = env.reset(jax.random.PRNGKey(0))
+    state.info["command"] = jnp.array([0.0, 0.0, 0.0])  # TODO: set from keyboard with launch_passive(m, d, key_callback=...)
     obs = env.compute_obs(mjx.device_put(mj_data), state.info)
 
     # Load the saved policy
@@ -219,5 +225,16 @@ def test():
 
 
 if __name__ == "__main__":
-    # train()
-    test()
+    usage_str = "Usage: python ex_barkour.py [train|test]"
+
+    if len(sys.argv) < 2:
+        print(usage_str)
+        sys.exit(1)
+
+    if sys.argv[1] == "train":
+        train()
+    elif sys.argv[1] == "test":
+        test()
+    else:
+        print(usage_str)
+        sys.exit(1)

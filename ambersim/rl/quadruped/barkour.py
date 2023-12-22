@@ -76,7 +76,7 @@ class BarkourConfig:
     reset_horizon = 500
 
     # Number of observations to stack through time
-    obs_hist_len = 15
+    obs_hist_len = 1
 
 
 class BarkourEnv(MjxEnv):
@@ -125,9 +125,9 @@ class BarkourEnv(MjxEnv):
         # lin_vel_x = [-0.6, 1.0]  # min max [m/s]
         # lin_vel_y = [-0.8, 0.8]  # min max [m/s]
         # ang_vel_yaw = [-0.7, 0.7]  # min max [rad/s]
-        lin_vel_x = [0, 0]  # min max [m/s]
-        lin_vel_y = [0, 0]  # min max [m/s]
-        ang_vel_yaw = [0, 0]  # min max [rad/s]
+        lin_vel_x = [0.0, 0.0]  # min max [m/s]
+        lin_vel_y = [0.0, 0.0]  # min max [m/s]
+        ang_vel_yaw = [0.0, 0.0]  # min max [rad/s]
 
         _, key1, key2, key3 = jax.random.split(rng, 4)
         lin_vel_x = jax.random.uniform(key1, (1,), minval=lin_vel_x[0], maxval=lin_vel_x[1])
