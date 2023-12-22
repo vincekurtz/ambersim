@@ -95,7 +95,6 @@ class BarkourEnv(MjxEnv):
         mj_model = load_mj_model_from_file(config.model_path)
 
         # Set solver parameters
-        mj_model.opt.solver = mujoco.mjtSolver.mjSOL_CG
         mj_model.opt.iterations = 4
         mj_model.opt.ls_iterations = 6
 
