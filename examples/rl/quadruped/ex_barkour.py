@@ -180,7 +180,7 @@ def test():
     mj_data.qpos = mj_model.keyframe("standing").qpos
     state = env.reset(jax.random.PRNGKey(0))
     state.info["command"] = jnp.array(
-        [0.0, 0.0, 0.0]
+        [1.0, 0.0, 0.0]
     )  # TODO: set from keyboard with launch_passive(m, d, key_callback=...)
     obs = env.compute_obs(mjx.device_put(mj_data), state.info)
 

@@ -51,20 +51,20 @@ class BarkourConfig:
     #********* Other Reward Parameters *********
 
     # Penalize the base velocity in z direction, L2 penalty.
-    lin_vel_z = -0.0  # -2.0
+    lin_vel_z = -0.2  # -2.0
 
     # Penalize the base roll and pitch rate. L2 penalty.
-    ang_vel_xy = -0.0  # -0.05
+    ang_vel_xy = -0.005  # -0.05
 
     # Penalize non-zero roll and pitch angles. L2 penalty.
-    orientation = -0.0  # -5.0
+    orientation = -5.0  # -5.0
 
     # L2 regularization of joint torques, |tau|^2.
     torques = -0.0  # -0.002
 
     # Penalize the change in the action and encourage smooth
     # actions. L2 regularization |action - last_action|^2
-    action_rate = -0.0  # -0.1
+    action_rate = -0.1  # -0.1
 
     # Encourage long swing steps.  However, it does not
     # encourage high clearances.
@@ -124,10 +124,10 @@ class BarkourEnv(MjxEnv):
 
     def sample_command(self, rng: jax.Array) -> jax.Array:
         """Generate a random user command (x velocity, y velocity, yaw rate)."""
-        # lin_vel_x = [-0.6, 1.0]  # min max [m/s]
+        lin_vel_x = [-0.6, 1.0]  # min max [m/s]
         # lin_vel_y = [-0.8, 0.8]  # min max [m/s]
         # ang_vel_yaw = [-0.7, 0.7]  # min max [rad/s]
-        lin_vel_x = [0.0, 0.0]  # min max [m/s]
+        # lin_vel_x = [0.0, 0.0]  # min max [m/s]
         lin_vel_y = [0.0, 0.0]  # min max [m/s]
         ang_vel_yaw = [0.0, 0.0]  # min max [rad/s]
 
