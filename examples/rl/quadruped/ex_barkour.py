@@ -179,19 +179,22 @@ def test():
     # Set the command and initial state
     mj_data.qpos = mj_model.keyframe("standing").qpos
     state = env.reset(jax.random.PRNGKey(0))
-    state.info["command"] = jnp.array([0.0, 0.0, 0.0])
+    state.info["command"] = jnp.array([1.0, 0.0, 0.0])
     obs = env.compute_obs(mjx.device_put(mj_data), state.info)
 
     # Define a callback to set the command
     paused = False
+
     def key_callback(keycode):
         """Sets the command velocity based on the keyboard."""
         nonlocal paused
         nonlocal state
 
-        # Spacebar pauses the sim
+        # Spacebar pauses the sim and resets the command to zero
         if chr(keycode) == " ":
             paused = not paused
+            state.info["command"] = jnp.array([0.0, 0.0, 0.0])
+
         # Up arrow increases the forward velocity target
         elif keycode == 265:
             print("up")
