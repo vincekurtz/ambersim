@@ -1,7 +1,7 @@
 import functools
 import pickle
-import time
 import sys
+import time
 from datetime import datetime
 
 import jax
@@ -40,13 +40,13 @@ def train():
     nz = 32
 
     # Initialize the environment
-    envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
-    # envs.register_environment("barkour", BarkourEnv)
+    # envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
+    envs.register_environment("barkour", BarkourEnv)
 
     # Create policy and value networks
-    policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
+    # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
     # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [16, 16, nz]})
-    # policy_network = MLP(layer_sizes=(128,) * 2 + (2 * nu,))
+    policy_network = MLP(layer_sizes=(128,) * 2 + (2 * nu,))
 
     value_network = MLP(layer_sizes=(256,) * 2 + (1,))
 
@@ -64,11 +64,13 @@ def train():
         def rand(rng):
             _, key = jax.random.split(rng, 2)
             # friction
-            friction = jax.random.uniform(key, (1,), minval=0.6, maxval=1.4)
+            # friction = jax.random.uniform(key, (1,), minval=0.6, maxval=1.4)
+            friction = jax.random.uniform(key, (1,), minval=1.0, maxval=1.0)
             friction = sys.geom_friction.at[:, 0].set(friction)
             # actuator
             _, key = jax.random.split(key, 2)
-            gain_range = (-10, -5)
+            # gain_range = (-10, -5)
+            gain_range = (-7.5, -7.5)
             param = (
                 jax.random.uniform(key, (1,), minval=gain_range[0], maxval=gain_range[1]) + sys.actuator_gainprm[:, 0]
             )
@@ -96,8 +98,8 @@ def train():
         )
 
         return sys, in_axes
-    
-    num_timesteps = 60_000_000
+
+    num_timesteps = 1_000_000
     eval_every = 100_000
 
     # Define the training function
@@ -178,7 +180,9 @@ def test():
     # Set the command and initial state
     mj_data.qpos = mj_model.keyframe("standing").qpos
     state = env.reset(jax.random.PRNGKey(0))
-    state.info["command"] = jnp.array([0.0, 0.0, 0.0])  # TODO: set from keyboard with launch_passive(m, d, key_callback=...)
+    state.info["command"] = jnp.array(
+        [0.0, 0.0, 0.0]
+    )  # TODO: set from keyboard with launch_passive(m, d, key_callback=...)
     obs = env.compute_obs(mjx.device_put(mj_data), state.info)
 
     # Load the saved policy
@@ -202,6 +206,7 @@ def test():
 
     # Run a little sim
     rng = jax.random.PRNGKey(0)
+    q_stand = mj_model.keyframe("standing").qpos[7:]
     with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
         while viewer.is_running():
             step_start = time.time()
@@ -209,7 +214,7 @@ def test():
 
             # Apply the policy
             act, _ = jit_policy(obs, act_rng)
-            mj_data.ctrl[:] = act
+            mj_data.ctrl[:] = q_stand + 0.3 * act
             obs = env.compute_obs(mjx.device_put(mj_data), state.info)
 
             # Step the simulation

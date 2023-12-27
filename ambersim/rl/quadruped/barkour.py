@@ -25,51 +25,10 @@ class BarkourConfig:
     # Number of "simulation steps" for every control input
     physics_steps_per_control_step: int = 10
 
-    # Reward function coefficients, from the MJX tutorial
-
-    # Track the base x-y velocity (no z-velocity tracking.)
-    tracking_lin_vel = 1.5
-
-    # Track the angular velocity along z-axis, i.e. yaw rate.
-    tracking_ang_vel = 0.8
-
-    # Penalize the base velocity in z direction, L2 penalty.
-    lin_vel_z = -2.0
-
-    # Penalize the base roll and pitch rate. L2 penalty.
-    ang_vel_xy = -0.05
-
-    # Penalize non-zero roll and pitch angles. L2 penalty.
-    orientation = -5.0
-
-    # L2 regularization of joint torques, |tau|^2.
-    torques = -0.002
-
-    # Penalize the change in the action and encourage smooth
-    # actions. L2 regularization |action - last_action|^2
-    action_rate = -0.1
-
-    # Encourage long swing steps.  However, it does not
-    # encourage high clearances.
-    feet_air_time = 0.2
-
-    # Encourage no motion at zero command, L2 regularization
-    # |q - q_default|^2.
-    stand_still = -0.5
-
-    # Early termination penalty.
-    termination = -1.0
-
-    # Penalizing foot slipping on the ground.
-    foot_slip = -0.1
-
-    # Tracking reward = exp(-error^2/sigma).
-    tracking_sigma = 0.25
-
     # Observation noise level
     obs_noise = 0.05
 
-    # Scaling factor for actions
+    # Scaling factor for actions (q_target = q_stand + action * action_scale)
     action_scale = 0.3
 
     # Time steps to take before terminating the episode
@@ -77,6 +36,49 @@ class BarkourConfig:
 
     # Number of observations to stack through time
     obs_hist_len = 1
+
+    #*********** Tracking Parameters ***********
+
+    # Tracking reward = exp(-error^2/sigma).
+    tracking_sigma = 0.25
+
+    # Track the base x-y velocity (no z-velocity tracking.)
+    tracking_lin_vel = 0.1  # 1.5
+
+    # Track the angular velocity along z-axis, i.e. yaw rate.
+    tracking_ang_vel = 0.1  # 0.8
+
+    #********* Other Reward Parameters *********
+
+    # Penalize the base velocity in z direction, L2 penalty.
+    lin_vel_z = -0.0  # -2.0
+
+    # Penalize the base roll and pitch rate. L2 penalty.
+    ang_vel_xy = -0.0  # -0.05
+
+    # Penalize non-zero roll and pitch angles. L2 penalty.
+    orientation = -0.0  # -5.0
+
+    # L2 regularization of joint torques, |tau|^2.
+    torques = -0.0  # -0.002
+
+    # Penalize the change in the action and encourage smooth
+    # actions. L2 regularization |action - last_action|^2
+    action_rate = -0.0  # -0.1
+
+    # Encourage long swing steps.  However, it does not
+    # encourage high clearances.
+    feet_air_time = 0.0  # 0.2
+
+    # Encourage no motion at zero command, L2 regularization
+    # |q - q_default|^2.
+    stand_still = -0.5  # -0.5
+
+    # Early termination penalty (for falling down)
+    termination = -100.0  # -1.0
+
+    # Penalizing foot slipping on the ground.
+    foot_slip = -0.0  # -0.1
 
 
 class BarkourEnv(MjxEnv):
@@ -252,7 +254,7 @@ class BarkourEnv(MjxEnv):
         done = jnp.dot(math.rotate(up, x.rot[0]), up) < 0
         done |= jnp.any(joint_angles < 0.98 * self.lowers)
         done |= jnp.any(joint_angles > 0.98 * self.uppers)
-        done |= x.pos[0, 2] < 0.18
+        done |= x.pos[0, 2] < 0.1  # 0.18
 
         # termination reward
         reward += done * (state.info["step"] < self.config.reset_horizon) * self.config.termination
