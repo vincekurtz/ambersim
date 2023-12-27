@@ -59,18 +59,17 @@ def train():
     # Domain randomization function
     def domain_randomize(sys, rng):
         """Randomize over friction and actuator gains."""
+        friction_range = (0.6, 1.4)
+        gain_range = (-10, -5)
 
         @jax.vmap
         def rand(rng):
             _, key = jax.random.split(rng, 2)
             # friction
-            # friction = jax.random.uniform(key, (1,), minval=0.6, maxval=1.4)
-            friction = jax.random.uniform(key, (1,), minval=1.0, maxval=1.0)
+            friction = jax.random.uniform(key, (1,), minval=friction_range[0], maxval=friction_range[1])
             friction = sys.geom_friction.at[:, 0].set(friction)
             # actuator
             _, key = jax.random.split(key, 2)
-            # gain_range = (-10, -5)
-            gain_range = (-7.5, -7.5)
             param = (
                 jax.random.uniform(key, (1,), minval=gain_range[0], maxval=gain_range[1]) + sys.actuator_gainprm[:, 0]
             )
@@ -117,8 +116,8 @@ def train():
         num_updates_per_batch=4,
         discounting=0.99,
         learning_rate=3e-4,
-        entropy_cost=1e-4,
-        num_envs=8192,
+        entropy_cost=1e-5,  # 1e-2
+        num_envs=4096,  # 8192
         batch_size=1024,
         network_factory=network_wrapper.make_ppo_networks,
         clipping_epsilon=0.2,
