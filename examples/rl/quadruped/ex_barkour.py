@@ -179,10 +179,29 @@ def test():
     # Set the command and initial state
     mj_data.qpos = mj_model.keyframe("standing").qpos
     state = env.reset(jax.random.PRNGKey(0))
-    state.info["command"] = jnp.array(
-        [1.0, 0.0, 0.0]
-    )  # TODO: set from keyboard with launch_passive(m, d, key_callback=...)
+    state.info["command"] = jnp.array([0.0, 0.0, 0.0])
     obs = env.compute_obs(mjx.device_put(mj_data), state.info)
+
+    # Define a callback to set the command
+    paused = False
+    def key_callback(keycode):
+        """Sets the command velocity based on the keyboard."""
+        nonlocal paused
+        nonlocal state
+
+        # Spacebar pauses the sim
+        if chr(keycode) == " ":
+            paused = not paused
+        # Up arrow increases the forward velocity target
+        elif keycode == 265:
+            print("up")
+            state.info["command"] += jnp.array([0.1, 0.0, 0.0])
+        # Down arrow decreases the forward velocity target
+        elif keycode == 264:
+            print("down")
+            state.info["command"] -= jnp.array([0.1, 0.0, 0.0])
+        else:
+            print("keycode: ", keycode)
 
     # Load the saved policy
     print("Loading policy ...")
@@ -206,26 +225,29 @@ def test():
     # Run a little sim
     rng = jax.random.PRNGKey(0)
     q_stand = mj_model.keyframe("standing").qpos[7:]
-    with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
+    with mujoco.viewer.launch_passive(mj_model, mj_data, key_callback=key_callback) as viewer:
         while viewer.is_running():
-            step_start = time.time()
-            act_rng, rng = jax.random.split(rng)
+            if not paused:
+                step_start = time.time()
+                act_rng, rng = jax.random.split(rng)
 
-            # Apply the policy
-            act, _ = jit_policy(obs, act_rng)
-            mj_data.ctrl[:] = q_stand + 0.3 * act
-            obs = env.compute_obs(mjx.device_put(mj_data), state.info)
+                print("Command: ", state.info["command"])
 
-            # Step the simulation
-            for _ in range(env._physics_steps_per_control_step):
-                mujoco.mj_step(mj_model, mj_data)
-                viewer.sync()
+                # Apply the policy
+                act, _ = jit_policy(obs, act_rng)
+                mj_data.ctrl[:] = q_stand + 0.3 * act
+                obs = env.compute_obs(mjx.device_put(mj_data), state.info)
 
-            # Try to run in roughly real time
-            elapsed = time.time() - step_start
-            dt = float(env.dt)
-            if elapsed < dt:
-                time.sleep(dt - elapsed)
+                # Step the simulation
+                for _ in range(env._physics_steps_per_control_step):
+                    mujoco.mj_step(mj_model, mj_data)
+                    viewer.sync()
+
+                # Try to run in roughly real time
+                elapsed = time.time() - step_start
+                dt = float(env.dt)
+                if elapsed < dt:
+                    time.sleep(dt - elapsed)
 
 
 if __name__ == "__main__":

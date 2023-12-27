@@ -37,18 +37,18 @@ class BarkourConfig:
     # Number of observations to stack through time
     obs_hist_len = 1
 
-    #*********** Tracking Parameters ***********
+    # *********** Tracking Parameters ***********
 
     # Tracking reward = exp(-error^2/sigma).
     tracking_sigma = 0.25
 
     # Track the base x-y velocity (no z-velocity tracking.)
-    tracking_lin_vel = 0.1  # 1.5
+    tracking_lin_vel = 1.5  # 1.5
 
     # Track the angular velocity along z-axis, i.e. yaw rate.
     tracking_ang_vel = 0.1  # 0.8
 
-    #********* Other Reward Parameters *********
+    # ********* Other Reward Parameters *********
 
     # Penalize the base velocity in z direction, L2 penalty.
     lin_vel_z = -0.2  # -2.0
