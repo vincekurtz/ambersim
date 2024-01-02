@@ -35,7 +35,7 @@ class BarkourConfig:
     reset_horizon = 500
 
     # Number of observations to stack through time
-    obs_hist_len = 1  # 15
+    obs_hist_len = 15  # 15
 
     # *********** Tracking Parameters ***********
 
@@ -43,7 +43,7 @@ class BarkourConfig:
     tracking_sigma = 0.25  # 0.25
 
     # Track the base x-y velocity (no z-velocity tracking.)
-    tracking_lin_vel = 1.5  # 1.5
+    tracking_lin_vel = 1.0  # 1.5
 
     # Track the angular velocity along z-axis, i.e. yaw rate.
     tracking_ang_vel = 0.8  # 0.8
@@ -75,7 +75,7 @@ class BarkourConfig:
     stand_still = -0.5  # -0.5
 
     # Early termination penalty (for falling down)
-    termination = -10  # -1.0
+    termination = -1.0  # -1.0
 
     # Penalizing foot slipping on the ground.
     foot_slip = -0.1  # -0.1
@@ -97,6 +97,7 @@ class BarkourEnv(MjxEnv):
         mj_model = load_mj_model_from_file(config.model_path)
 
         # Set solver parameters
+        mj_model.opt.solver = mujoco.mjtSolver.mjSOL_CG
         mj_model.opt.iterations = 4
         mj_model.opt.ls_iterations = 6
 
@@ -125,11 +126,8 @@ class BarkourEnv(MjxEnv):
     def sample_command(self, rng: jax.Array) -> jax.Array:
         """Generate a random user command (x velocity, y velocity, yaw rate)."""
         lin_vel_x = [-0.6, 1.0]  # min max [m/s]
-        # lin_vel_y = [-0.8, 0.8]  # min max [m/s]
-        # ang_vel_yaw = [-0.7, 0.7]  # min max [rad/s]
-        # lin_vel_x = [0.0, 0.0]  # min max [m/s]
-        lin_vel_y = [0.0, 0.0]  # min max [m/s]
-        ang_vel_yaw = [0.0, 0.0]  # min max [rad/s]
+        lin_vel_y = [-0.8, 0.8]  # min max [m/s]
+        ang_vel_yaw = [-0.7, 0.7]  # min max [rad/s]
 
         _, key1, key2, key3 = jax.random.split(rng, 4)
         lin_vel_x = jax.random.uniform(key1, (1,), minval=lin_vel_x[0], maxval=lin_vel_x[1])
@@ -254,7 +252,7 @@ class BarkourEnv(MjxEnv):
         done = jnp.dot(math.rotate(up, x.rot[0]), up) < 0
         done |= jnp.any(joint_angles < 0.98 * self.lowers)
         done |= jnp.any(joint_angles > 0.98 * self.uppers)
-        done |= x.pos[0, 2] < 0.1  # 0.18
+        done |= x.pos[0, 2] < 0.18  # 0.18
 
         # termination reward
         reward += done * (state.info["step"] < self.config.reset_horizon) * self.config.termination

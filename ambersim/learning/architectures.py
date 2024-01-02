@@ -44,7 +44,7 @@ class MLP(nn.Module):
                 name=f"dense_{i}",
             )(x)
             if i != len(self.layer_sizes) - 1 or self.activate_final:
-                x = nn.relu(x)
+                x = nn.swish(x)
         return x
 
 

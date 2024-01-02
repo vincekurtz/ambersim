@@ -46,9 +46,9 @@ def train():
     # Create policy and value networks
     # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
     # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [16, 16, nz]})
-    policy_network = MLP(layer_sizes=(128,) * 2 + (2 * nu,))
+    policy_network = MLP(layer_sizes=(128,) * 4 + (2 * nu,))
 
-    value_network = MLP(layer_sizes=(256,) * 2 + (1,))
+    value_network = MLP(layer_sizes=(256,) * 5 + (1,))
 
     network_wrapper = BraxPPONetworksWrapper(
         policy_network=policy_network,
@@ -104,8 +104,10 @@ def train():
     # Define the training function
     train_fn = functools.partial(
         ppo.train,
-        num_timesteps=num_timesteps,
-        num_evals=num_timesteps // eval_every,
+        # num_timesteps=num_timesteps,
+        # num_evals=num_timesteps // eval_every,
+        num_timesteps=60_000_000,
+        num_evals=3,
         reward_scaling=1,
         episode_length=1000,
         normalize_observations=True,
@@ -116,11 +118,11 @@ def train():
         num_updates_per_batch=4,
         discounting=0.99,
         learning_rate=3e-4,
-        entropy_cost=1e-5,  # 1e-2
-        num_envs=4096,  # 8192
+        entropy_cost=1e-2,  # 1e-2
+        num_envs=8192,  # 8192
         batch_size=1024,
         network_factory=network_wrapper.make_ppo_networks,
-        clipping_epsilon=0.2,
+        clipping_epsilon=0.3,
         num_resets_per_eval=10,
         randomization_fn=domain_randomize,
         seed=0,
@@ -179,7 +181,7 @@ def test():
     # Set the command and initial state
     mj_data.qpos = mj_model.keyframe("standing").qpos
     state = env.reset(jax.random.PRNGKey(0))
-    state.info["command"] = jnp.array([1.0, 0.0, 0.0])
+    state.info["command"] = jnp.array([1.0, 0.0, -0.5])
     obs = env.compute_obs(mjx.device_put(mj_data), state.info)
 
     # Define a callback to set the command
@@ -190,19 +192,29 @@ def test():
         nonlocal paused
         nonlocal state
 
-        # Spacebar pauses the sim and resets the command to zero
         if chr(keycode) == " ":
+            # Spacebar pauses the sim and resets the command to zero
             paused = not paused
             state.info["command"] = jnp.array([0.0, 0.0, 0.0])
 
-        # Up arrow increases the forward velocity target
         elif keycode == 265:
-            print("up")
+            # Up arrow increases the forward velocity target
             state.info["command"] += jnp.array([0.1, 0.0, 0.0])
-        # Down arrow decreases the forward velocity target
         elif keycode == 264:
-            print("down")
+            # Down arrow decreases the forward velocity target
             state.info["command"] -= jnp.array([0.1, 0.0, 0.0])
+        elif keycode == 262:
+            # Right arrow increases the yaw velocity target
+            state.info["command"] += jnp.array([0.0, 0.0, 0.1])
+        elif keycode == 263:
+            # Left arrow decreases the yaw velocity target
+            state.info["command"] -= jnp.array([0.0, 0.0, 0.1])
+        elif keycode == 326:
+            # number pad right arrow (4) increases the side velocity target
+            state.info["command"] += jnp.array([0.0, 0.1, 0.0])
+        elif keycode == 324:
+            # number pad left arrow (6) decreases the side velocity target
+            state.info["command"] -= jnp.array([0.0, 0.1, 0.0])
         else:
             print("keycode: ", keycode)
 
