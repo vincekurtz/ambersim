@@ -43,42 +43,46 @@ class BarkourConfig:
     tracking_sigma = 0.25  # 0.25
 
     # Track the base x-y velocity (no z-velocity tracking.)
-    tracking_lin_vel = 3.0  # 1.5
+    tracking_lin_vel = 1.5  # 1.5
 
     # Track the angular velocity along z-axis, i.e. yaw rate.
-    tracking_ang_vel = 1.0  # 0.8
+    tracking_ang_vel = 0.8  # 0.8
 
     # ********* Other Reward Parameters *********
 
     # Penalize the base velocity in z direction, L2 penalty.
-    lin_vel_z = -2.0  # -2.0
+    lin_vel_z = -0.0  # -2.0
 
     # Penalize the base roll and pitch rate. L2 penalty.
-    ang_vel_xy = -0.05  # -0.05
+    ang_vel_xy = -0.0  # -0.05
 
     # Penalize non-zero roll and pitch angles. L2 penalty.
-    orientation = -2.0  # -5.0
+    orientation = -1.0  # -5.0
+
+    # Penalize height of the base ||base_height - default_base_height||^2.
+    base_height = -1.0  # 0.0
+    default_base_height = 0.21
 
     # L2 regularization of joint torques, |tau|^2.
-    torques = -0.002  # -0.002
+    torques = -0.0  # -0.002
 
     # Penalize the change in the action and encourage smooth
     # actions. L2 regularization |action - last_action|^2
-    action_rate = -0.05  # -0.1
+    action_rate = -0.0  # -0.1
 
     # Encourage long swing steps.  However, it does not
     # encourage high clearances.
-    feet_air_time = 0.2  # 0.2
+    feet_air_time = 0.0  # 0.2
 
     # Encourage no motion at zero command, L2 regularization
     # |q - q_default|^2.
-    stand_still = -0.1  # -0.5
+    stand_still = -0.0  # -0.5
 
     # Early termination penalty (for falling down)
-    termination = -1.0  # -1.0
+    termination = -10.0  # -1.0
 
     # Penalizing foot slipping on the ground.
-    foot_slip = -0.1  # -0.1
+    foot_slip = -0.0  # -0.1
 
 
 class BarkourEnv(MjxEnv):
@@ -97,7 +101,7 @@ class BarkourEnv(MjxEnv):
         mj_model = load_mj_model_from_file(config.model_path)
 
         # Set solver parameters
-        mj_model.opt.solver = mujoco.mjtSolver.mjSOL_CG
+        mj_model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON
         mj_model.opt.iterations = 4
         mj_model.opt.ls_iterations = 6
 
@@ -165,6 +169,7 @@ class BarkourEnv(MjxEnv):
                 "stand_still": 0.0,
                 "feet_air_time": 0.0,
                 "foot_slip": 0.0,
+                "base_height": 0.0,
             },
             "step": 0,
         }
@@ -209,32 +214,37 @@ class BarkourEnv(MjxEnv):
         # reward
         reward_tuple = {
             "tracking_lin_vel": (
-                self._reward_tracking_lin_vel(state.info["command"], x, xd) * self.config.tracking_lin_vel
+                self.dt * self._reward_tracking_lin_vel(state.info["command"], x, xd) * self.config.tracking_lin_vel
             ),
             "tracking_ang_vel": (
-                self._reward_tracking_ang_vel(state.info["command"], x, xd) * self.config.tracking_ang_vel
+                self.dt * self._reward_tracking_ang_vel(state.info["command"], x, xd) * self.config.tracking_ang_vel
             ),
-            "lin_vel_z": (self._reward_lin_vel_z(xd) * self.config.lin_vel_z),
-            "ang_vel_xy": (self._reward_ang_vel_xy(xd) * self.config.ang_vel_xy),
-            "orientation": (self._reward_orientation(x) * self.config.orientation),
-            "torque": (self._reward_torques(data.qfrc_actuator) * self.config.torques),
-            "action_rate": (self._reward_action_rate(cur_action, state.info["last_act"]) * self.config.action_rate),
+            "lin_vel_z": (self.dt * self._reward_lin_vel_z(xd) * self.config.lin_vel_z),
+            "ang_vel_xy": (self.dt * self._reward_ang_vel_xy(xd) * self.config.ang_vel_xy),
+            "orientation": (self.dt * self._reward_orientation(x) * self.config.orientation),
+            "torque": (self.dt * self._reward_torques(data.qfrc_actuator) * self.config.torques),
+            "action_rate": (
+                self.dt * self._reward_action_rate(cur_action, state.info["last_act"]) * self.config.action_rate
+            ),
             "stand_still": (
-                self._reward_stand_still(state.info["command"], joint_angles, self._default_ap_pose)
+                self.dt
+                * self._reward_stand_still(state.info["command"], joint_angles, self._default_ap_pose)
                 * self.config.stand_still
             ),
             "feet_air_time": (
-                self._reward_feet_air_time(
+                self.dt
+                * self._reward_feet_air_time(
                     state.info["feet_air_time"],
                     first_contact,
                     state.info["command"],
                 )
                 * self.config.feet_air_time
             ),
-            "foot_slip": (self._reward_foot_slip(x, xd, contact_filt_cm) * self.config.foot_slip),
+            "foot_slip": (self.dt * self._reward_foot_slip(x, xd, contact_filt_cm) * self.config.foot_slip),
+            "base_height": (self.dt * self._reward_base_height(x) * self.config.base_height),
         }
         reward = sum(reward_tuple.values())
-        reward = jnp.clip(reward * self.dt, 0.0, 10000.0)
+        # reward = jnp.clip(reward * self.dt, 0.0, 10000.0)
 
         # state management
         state.info["last_act"] = cur_action
@@ -252,7 +262,7 @@ class BarkourEnv(MjxEnv):
         done = jnp.dot(math.rotate(up, x.rot[0]), up) < 0
         done |= jnp.any(joint_angles < 0.98 * self.lowers)
         done |= jnp.any(joint_angles > 0.98 * self.uppers)
-        done |= x.pos[0, 2] < 0.13  # 0.18
+        done |= x.pos[0, 2] < 0.1  # 0.18
 
         # termination reward
         reward += done * (state.info["step"] < self.config.reset_horizon) * self.config.termination
@@ -365,6 +375,10 @@ class BarkourEnv(MjxEnv):
         _, foot_world_vel = self._get_feet_pos_vel(x, xd)
         # Penalize large feet velocity for feet that are in contact with the ground.
         return jnp.sum(jnp.square(foot_world_vel[:, :2]) * contact_filt.reshape((-1, 1)))
+
+    def _reward_base_height(self, x: Transform) -> jax.Array:
+        # Penalize height of the base
+        return jnp.square(x.pos[0, 2] - self.config.default_base_height)
 
     def _pos_vel(self, data: mjx.Data) -> Tuple[Transform, Motion]:
         """Returns 6d spatial transform and 6d velocity for all bodies."""

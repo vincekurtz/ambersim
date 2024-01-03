@@ -181,7 +181,7 @@ def test():
     # Set the command and initial state
     mj_data.qpos = mj_model.keyframe("standing").qpos
     state = env.reset(jax.random.PRNGKey(0))
-    state.info["command"] = jnp.array([1.0, 0.0, -0.5])
+    state.info["command"] = jnp.array([0.0, 0.0, 0.0])
     state.info["z"] = jnp.zeros(nz)
     obs = env.compute_obs(mjx.device_put(mj_data), state.info)
 
@@ -206,10 +206,10 @@ def test():
             state.info["command"] -= jnp.array([0.1, 0.0, 0.0])
         elif keycode == 262:
             # Right arrow increases the yaw velocity target
-            state.info["command"] += jnp.array([0.0, 0.0, 0.1])
+            state.info["command"] -= jnp.array([0.0, 0.0, 0.1])
         elif keycode == 263:
             # Left arrow decreases the yaw velocity target
-            state.info["command"] -= jnp.array([0.0, 0.0, 0.1])
+            state.info["command"] += jnp.array([0.0, 0.0, 0.1])
         elif keycode == 326:
             # number pad right arrow (4) increases the side velocity target
             state.info["command"] += jnp.array([0.0, 0.1, 0.0])
