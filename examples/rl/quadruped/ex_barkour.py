@@ -171,7 +171,6 @@ def test():
     """Load a trained policy and run a little sim with it."""
     # Create an environment for evaluation
     print("Creating test environment...")
-    # envs.register_environment("barkour", BarkourEnv)
     nz = 0
     envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
     env = envs.get_environment("barkour")
@@ -218,6 +217,11 @@ def test():
             state.info["command"] -= jnp.array([0.0, 0.1, 0.0])
         else:
             print("keycode: ", keycode)
+
+        # Clip the command to the allowed range
+        min_cmd = jnp.array([-0.6, 0.0, -0.7])
+        max_cmd = jnp.array([1.0, 0.6, 0.7])
+        state.info["command"] = jnp.clip(state.info["command"], min_cmd, max_cmd)
 
     # Load the saved policy
     print("Loading policy ...")

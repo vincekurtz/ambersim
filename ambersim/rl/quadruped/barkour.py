@@ -68,7 +68,7 @@ class BarkourConfig:
 
     # Penalize the change in the action and encourage smooth
     # actions. L2 regularization |action - last_action|^2
-    action_rate = -0.0  # -0.1
+    action_rate = -0.1  # -0.1
 
     # Encourage long swing steps.  However, it does not
     # encourage high clearances.
@@ -130,7 +130,8 @@ class BarkourEnv(MjxEnv):
     def sample_command(self, rng: jax.Array) -> jax.Array:
         """Generate a random user command (x velocity, y velocity, yaw rate)."""
         lin_vel_x = [-0.6, 1.0]  # min max [m/s]
-        lin_vel_y = [-0.8, 0.8]  # min max [m/s]
+        # lin_vel_y = [-0.8, 0.8]  # min max [m/s]
+        lin_vel_y = [ 0.0, 0.0]  # min max [m/s]
         ang_vel_yaw = [-0.7, 0.7]  # min max [rad/s]
 
         _, key1, key2, key3 = jax.random.split(rng, 4)
