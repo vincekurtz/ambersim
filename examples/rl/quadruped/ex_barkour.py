@@ -37,15 +37,15 @@ def train():
     # Observation, action, and lifted state sizes for the controller system
     ny = 31
     nu = 12
-    nz = 32
+    nz = 0
 
     # Initialize the environment
-    # envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
-    envs.register_environment("barkour", BarkourEnv)
+    envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
+    # envs.register_environment("barkour", BarkourEnv)
 
     # Create policy and value networks
     # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
-    # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [16, 16, nz]})
+    # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [128, 128, nz]})
     policy_network = MLP(layer_sizes=(128,) * 4 + (2 * nu,))
 
     value_network = MLP(layer_sizes=(256,) * 5 + (1,))
@@ -98,16 +98,14 @@ def train():
 
         return sys, in_axes
 
-    num_timesteps = 1_000_000
+    num_timesteps = 3_000_000
     eval_every = 100_000
 
     # Define the training function
     train_fn = functools.partial(
         ppo.train,
-        # num_timesteps=num_timesteps,
-        # num_evals=num_timesteps // eval_every,
-        num_timesteps=60_000_000,
-        num_evals=3,
+        num_timesteps=num_timesteps,
+        num_evals=num_timesteps // eval_every,
         reward_scaling=1,
         episode_length=1000,
         normalize_observations=True,
@@ -118,8 +116,8 @@ def train():
         num_updates_per_batch=4,
         discounting=0.99,
         learning_rate=3e-4,
-        entropy_cost=1e-2,  # 1e-2
-        num_envs=8192,  # 8192
+        entropy_cost=1e-5,  # 1e-2
+        num_envs=4096,  # 8192
         batch_size=1024,
         network_factory=network_wrapper.make_ppo_networks,
         clipping_epsilon=0.3,
@@ -173,7 +171,9 @@ def test():
     """Load a trained policy and run a little sim with it."""
     # Create an environment for evaluation
     print("Creating test environment...")
-    envs.register_environment("barkour", BarkourEnv)
+    # envs.register_environment("barkour", BarkourEnv)
+    nz = 0
+    envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
     env = envs.get_environment("barkour")
     mj_model = env.model
     mj_data = mujoco.MjData(mj_model)
@@ -182,6 +182,7 @@ def test():
     mj_data.qpos = mj_model.keyframe("standing").qpos
     state = env.reset(jax.random.PRNGKey(0))
     state.info["command"] = jnp.array([1.0, 0.0, -0.5])
+    state.info["z"] = jnp.zeros(nz)
     obs = env.compute_obs(mjx.device_put(mj_data), state.info)
 
     # Define a callback to set the command
@@ -250,8 +251,9 @@ def test():
 
                 # Apply the policy
                 act, _ = jit_policy(obs, act_rng)
-                mj_data.ctrl[:] = q_stand + 0.3 * act
+                mj_data.ctrl[:] = q_stand + 0.3 * act[nz:]
                 obs = env.compute_obs(mjx.device_put(mj_data), state.info)
+                state.info["z"] = act[:nz]
 
                 # Step the simulation
                 for _ in range(env._physics_steps_per_control_step):

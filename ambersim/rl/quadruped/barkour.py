@@ -35,7 +35,7 @@ class BarkourConfig:
     reset_horizon = 500
 
     # Number of observations to stack through time
-    obs_hist_len = 15  # 15
+    obs_hist_len = 1  # 15
 
     # *********** Tracking Parameters ***********
 
@@ -43,10 +43,10 @@ class BarkourConfig:
     tracking_sigma = 0.25  # 0.25
 
     # Track the base x-y velocity (no z-velocity tracking.)
-    tracking_lin_vel = 1.0  # 1.5
+    tracking_lin_vel = 3.0  # 1.5
 
     # Track the angular velocity along z-axis, i.e. yaw rate.
-    tracking_ang_vel = 0.8  # 0.8
+    tracking_ang_vel = 1.0  # 0.8
 
     # ********* Other Reward Parameters *********
 
@@ -57,14 +57,14 @@ class BarkourConfig:
     ang_vel_xy = -0.05  # -0.05
 
     # Penalize non-zero roll and pitch angles. L2 penalty.
-    orientation = -5.0  # -5.0
+    orientation = -2.0  # -5.0
 
     # L2 regularization of joint torques, |tau|^2.
     torques = -0.002  # -0.002
 
     # Penalize the change in the action and encourage smooth
     # actions. L2 regularization |action - last_action|^2
-    action_rate = -0.1  # -0.1
+    action_rate = -0.05  # -0.1
 
     # Encourage long swing steps.  However, it does not
     # encourage high clearances.
@@ -72,7 +72,7 @@ class BarkourConfig:
 
     # Encourage no motion at zero command, L2 regularization
     # |q - q_default|^2.
-    stand_still = -0.5  # -0.5
+    stand_still = -0.1  # -0.5
 
     # Early termination penalty (for falling down)
     termination = -1.0  # -1.0
@@ -252,7 +252,7 @@ class BarkourEnv(MjxEnv):
         done = jnp.dot(math.rotate(up, x.rot[0]), up) < 0
         done |= jnp.any(joint_angles < 0.98 * self.lowers)
         done |= jnp.any(joint_angles > 0.98 * self.uppers)
-        done |= x.pos[0, 2] < 0.18  # 0.18
+        done |= x.pos[0, 2] < 0.13  # 0.18
 
         # termination reward
         reward += done * (state.info["step"] < self.config.reset_horizon) * self.config.termination
