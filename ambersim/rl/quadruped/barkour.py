@@ -51,10 +51,10 @@ class BarkourConfig:
     # ********* Other Reward Parameters *********
 
     # Penalize the base velocity in z direction, L2 penalty.
-    lin_vel_z = -0.0  # -2.0
+    lin_vel_z = -2.0  # -2.0
 
     # Penalize the base roll and pitch rate. L2 penalty.
-    ang_vel_xy = -0.0  # -0.05
+    ang_vel_xy = -0.05  # -0.05
 
     # Penalize non-zero roll and pitch angles. L2 penalty.
     orientation = -5.0  # -5.0
