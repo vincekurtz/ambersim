@@ -40,13 +40,13 @@ class BarkourConfig:
     # *********** Tracking Parameters ***********
 
     # Tracking reward = exp(-error^2/sigma).
-    tracking_sigma = 0.25  # 0.25
+    tracking_sigma = 0.15  # 0.25
 
     # Track the base x-y velocity (no z-velocity tracking.)
-    tracking_lin_vel = 1.5  # 1.5
+    tracking_lin_vel = 3.0  # 1.5
 
     # Track the angular velocity along z-axis, i.e. yaw rate.
-    tracking_ang_vel = 0.8  # 0.8
+    tracking_ang_vel = 2.0  # 0.8
 
     # ********* Other Reward Parameters *********
 
@@ -57,11 +57,11 @@ class BarkourConfig:
     ang_vel_xy = -0.0  # -0.05
 
     # Penalize non-zero roll and pitch angles. L2 penalty.
-    orientation = -1.0  # -5.0
+    orientation = -5.0  # -5.0
 
     # Penalize height of the base ||base_height - default_base_height||^2.
     base_height = -1.0  # 0.0
-    default_base_height = 0.21
+    default_base_height = 0.25
 
     # L2 regularization of joint torques, |tau|^2.
     torques = -0.0  # -0.002
@@ -131,7 +131,7 @@ class BarkourEnv(MjxEnv):
         """Generate a random user command (x velocity, y velocity, yaw rate)."""
         lin_vel_x = [-0.6, 1.0]  # min max [m/s]
         # lin_vel_y = [-0.8, 0.8]  # min max [m/s]
-        lin_vel_y = [ 0.0, 0.0]  # min max [m/s]
+        lin_vel_y = [0.0, 0.0]  # min max [m/s]
         ang_vel_yaw = [-0.7, 0.7]  # min max [rad/s]
 
         _, key1, key2, key3 = jax.random.split(rng, 4)

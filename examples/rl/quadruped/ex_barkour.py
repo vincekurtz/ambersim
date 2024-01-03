@@ -177,6 +177,18 @@ def test():
     mj_model = env.model
     mj_data = mujoco.MjData(mj_model)
 
+    # Set actuator gains
+    offset = 10.0
+    old_gains = mj_model.actuator_gainprm[:, 0]
+    new_gains = old_gains + offset
+    mj_model.actuator_gainprm[:, 0] = new_gains
+    mj_model.actuator_biasprm[:, 1] = -new_gains
+
+    # Set friction
+    old_friction = mj_model.geom_friction[:, 0]
+    new_friction = 1.0 * old_friction
+    mj_model.geom_friction[:, 0] = new_friction
+
     # Set the command and initial state
     mj_data.qpos = mj_model.keyframe("standing").qpos
     state = env.reset(jax.random.PRNGKey(0))
@@ -222,6 +234,7 @@ def test():
         min_cmd = jnp.array([-0.6, 0.0, -0.7])
         max_cmd = jnp.array([1.0, 0.6, 0.7])
         state.info["command"] = jnp.clip(state.info["command"], min_cmd, max_cmd)
+        print("Command: ", state.info["command"])
 
     # Load the saved policy
     print("Loading policy ...")
@@ -250,8 +263,6 @@ def test():
             if not paused:
                 step_start = time.time()
                 act_rng, rng = jax.random.split(rng)
-
-                print("Command: ", state.info["command"])
 
                 # Apply the policy
                 act, _ = jit_policy(obs, act_rng)
