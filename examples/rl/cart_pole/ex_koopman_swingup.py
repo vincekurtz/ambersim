@@ -40,7 +40,7 @@ def train():
 
     # Create the policy and value networks
     print("Creating policy network...")
-    ny = 20  # observations are degree-2 polynomials of [cart_pos, cos(theta), sin(theta), cart_vel, theta_dot]
+    ny = 8  # observations are degree-2 polynomials of [cart_pos, cos(theta), sin(theta), cart_vel, theta_dot]
     nu = 1  # control input is [cart_force]
     # policy_network = MLP(layer_sizes=[128, 128, 2 * (nz + nu)])
     # policy_network = MLP(layer_sizes=[2 * (nz + nu)], bias=False)
@@ -161,6 +161,22 @@ def test(start_angle=0.0):
             act_rng, rng = jax.random.split(rng)
 
             print("|z|: ", jnp.linalg.norm(info["z"]))
+
+            # Mask some of the observations
+            mask = jnp.array(
+                [
+                    1,  # cart_pos
+                    1,  # cos(theta)
+                    1,  # sin(theta)
+                    1,  # cart_vel
+                    1,  # theta_dot
+                    1,  # cos(theta) * sin(theta)
+                    1,  # cos(theta) * cart_vel
+                    1,  # cos(theta) * theta_dot
+                ]
+            )
+            mask = jnp.concatenate([jnp.ones(nz), mask])
+            obs = obs * mask
 
             # Apply the policy
             act, _ = jit_policy(obs, act_rng)

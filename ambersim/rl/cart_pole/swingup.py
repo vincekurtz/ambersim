@@ -70,21 +70,9 @@ class CartPoleSwingupEnv(MjxEnv):
                 s,
                 pd,
                 td,
-                p**2,
-                c**2,
-                s**2,
-                pd**2,
-                td**2,
-                p * c,
-                p * s,
-                p * pd,
-                p * td,
                 c * s,
                 c * pd,
                 c * td,
-                s * pd,
-                s * td,
-                pd * td,
             ]
         )
 
