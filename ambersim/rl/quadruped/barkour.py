@@ -35,7 +35,7 @@ class BarkourConfig:
     reset_horizon = 500
 
     # Number of observations to stack through time
-    obs_hist_len = 2  # 15
+    obs_hist_len = 1  # 15
 
     # *********** Tracking Parameters ***********
 
