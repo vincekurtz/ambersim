@@ -37,23 +37,23 @@ def train():
     # Observation, action, and lifted state sizes for the controller system
     ny = 31
     nu = 12
-    nz = 0
+    nz = 64
 
     # Initialize the environment
     envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
     # envs.register_environment("barkour", BarkourEnv)
 
     # Create policy and value networks
-    # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
+    policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
     # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [128, 128, nz]})
-    policy_network = MLP(layer_sizes=(128,) * 4 + (2 * nu,))
+    # policy_network = MLP(layer_sizes=(128,) * 4 + (2 * nu,))
 
     value_network = MLP(layer_sizes=(256,) * 5 + (1,))
 
     network_wrapper = BraxPPONetworksWrapper(
         policy_network=policy_network,
         value_network=value_network,
-        action_distribution=NormalTanhDistribution,
+        action_distribution=NormalDistribution,
     )
 
     # Domain randomization function
@@ -98,7 +98,7 @@ def train():
 
         return sys, in_axes
 
-    num_timesteps = 3_000_000
+    num_timesteps = 10_000_000
     eval_every = 100_000
 
     # Define the training function
@@ -120,7 +120,7 @@ def train():
         num_envs=4096,  # 8192
         batch_size=1024,
         network_factory=network_wrapper.make_ppo_networks,
-        clipping_epsilon=0.3,
+        clipping_epsilon=0.2,
         num_resets_per_eval=10,
         randomization_fn=domain_randomize,
         seed=0,
