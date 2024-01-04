@@ -171,7 +171,7 @@ def test():
     """Load a trained policy and run a little sim with it."""
     # Create an environment for evaluation
     print("Creating test environment...")
-    nz = 0
+    nz = 64
     envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
     env = envs.get_environment("barkour")
     mj_model = env.model
@@ -266,9 +266,9 @@ def test():
 
                 # Apply the policy
                 act, _ = jit_policy(obs, act_rng)
+                state.info["z"] = act[:nz]
                 mj_data.ctrl[:] = q_stand + 0.3 * act[nz:]
                 obs = env.compute_obs(mjx.device_put(mj_data), state.info)
-                state.info["z"] = act[:nz]
 
                 # Step the simulation
                 for _ in range(env._physics_steps_per_control_step):
