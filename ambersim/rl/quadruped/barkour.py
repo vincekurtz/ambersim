@@ -76,10 +76,10 @@ class BarkourConfig:
 
     # Encourage no motion at zero command, L2 regularization
     # |q - q_default|^2.
-    stand_still = -0.5  # -0.5
+    stand_still = -0.1  # -0.5
 
     # Early termination penalty (for falling down)
-    termination = -10.0  # -1.0
+    termination = -20  # -1.0
 
     # Penalizing foot slipping on the ground.
     foot_slip = -0.0  # -0.1

@@ -37,16 +37,17 @@ def train():
     # Observation, action, and lifted state sizes for the controller system
     ny = 31 * 1
     nu = 12
-    nz = 32
+    nz = 0
 
     # Initialize the environment
     envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
     # envs.register_environment("barkour", BarkourEnv)
 
     # Create policy and value networks
-    policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
+    # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
     # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [256, 128, nz]})
-    # policy_network = MLP(layer_sizes=(128,) * 4 + (2 * (nu + nz),))
+    # policy_network = MLP(layer_sizes=(128,) * 2 + (2 * (nu + nz),))
+    policy_network = MLP(layer_sizes=(2 * (nu + nz),))
 
     value_network = MLP(layer_sizes=(256,) * 5 + (1,))
 
@@ -60,7 +61,8 @@ def train():
     def domain_randomize(sys, rng):
         """Randomize over friction and actuator gains."""
         friction_range = (0.6, 1.4)
-        gain_range = (-10, -5)
+        gain_range = (-5, 5)
+        bias_range = (-0.1, 0.1)
 
         @jax.vmap
         def rand(rng):
@@ -68,13 +70,21 @@ def train():
             # friction
             friction = jax.random.uniform(key, (1,), minval=friction_range[0], maxval=friction_range[1])
             friction = sys.geom_friction.at[:, 0].set(friction)
-            # actuator
+
+            # actuator gains
             _, key = jax.random.split(key, 2)
-            param = (
+            gain_param = (
                 jax.random.uniform(key, (1,), minval=gain_range[0], maxval=gain_range[1]) + sys.actuator_gainprm[:, 0]
             )
-            gain = sys.actuator_gainprm.at[:, 0].set(param)
-            bias = sys.actuator_biasprm.at[:, 1].set(-param)
+            gain = sys.actuator_gainprm.at[:, 0].set(gain_param)
+
+            # actuator bias
+            _, key = jax.random.split(key, 2)
+            bias_param = (
+                jax.random.uniform(key, (1,), minval=bias_range[0], maxval=bias_range[1]) + sys.actuator_biasprm[:, 1]
+            )
+            bias = sys.actuator_biasprm.at[:, 1].set(bias_param)
+
             return friction, gain, bias
 
         friction, gain, bias = rand(rng)
@@ -98,7 +108,7 @@ def train():
 
         return sys, in_axes
 
-    num_timesteps = 10_000_000
+    num_timesteps = 3_000_000
     eval_every = 100_000
 
     # Define the training function
@@ -171,18 +181,17 @@ def test():
     """Load a trained policy and run a little sim with it."""
     # Create an environment for evaluation
     print("Creating test environment...")
-    nz = 32
+    nz = 0
     envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
     env = envs.get_environment("barkour")
     mj_model = env.model
     mj_data = mujoco.MjData(mj_model)
 
     # Set actuator gains
-    offset = -10.0
+    offset = 0.0
     old_gains = mj_model.actuator_gainprm[:, 0]
     new_gains = old_gains + offset
     mj_model.actuator_gainprm[:, 0] = new_gains
-    mj_model.actuator_biasprm[:, 1] = -new_gains
 
     # Set friction
     old_friction = mj_model.geom_friction[:, 0]
