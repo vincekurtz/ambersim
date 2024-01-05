@@ -180,9 +180,9 @@ def test(start_angle=0.0):
 
             # Apply the policy
             act, _ = jit_policy(obs, act_rng)
+            info["z"] = act[:nz]
             mj_data.ctrl[:] = act[nz:]
             obs = env.compute_obs(mjx.device_put(mj_data), info)
-            info["z"] = act[:nz]
 
             # Step the simulation
             for _ in range(env._physics_steps_per_control_step):
