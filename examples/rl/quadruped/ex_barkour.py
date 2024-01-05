@@ -45,8 +45,8 @@ def train():
 
     # Create policy and value networks
     # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
-    policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [256, 128, nz]})
-    # policy_network = MLP(layer_sizes=(128,) * 4 + (2 * nu,))
+    # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [256, 128, nz]})
+    policy_network = MLP(layer_sizes=(128,) * 4 + (2 * (nu + nz),))
 
     value_network = MLP(layer_sizes=(256,) * 5 + (1,))
 
