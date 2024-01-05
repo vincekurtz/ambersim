@@ -37,16 +37,16 @@ def train():
     # Observation, action, and lifted state sizes for the controller system
     ny = 31 * 1
     nu = 12
-    nz = 64
+    nz = 32
 
     # Initialize the environment
     envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
     # envs.register_environment("barkour", BarkourEnv)
 
     # Create policy and value networks
-    # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
+    policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
     # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [256, 128, nz]})
-    policy_network = MLP(layer_sizes=(128,) * 4 + (2 * (nu + nz),))
+    # policy_network = MLP(layer_sizes=(128,) * 4 + (2 * (nu + nz),))
 
     value_network = MLP(layer_sizes=(256,) * 5 + (1,))
 
@@ -171,14 +171,14 @@ def test():
     """Load a trained policy and run a little sim with it."""
     # Create an environment for evaluation
     print("Creating test environment...")
-    nz = 64
+    nz = 32
     envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
     env = envs.get_environment("barkour")
     mj_model = env.model
     mj_data = mujoco.MjData(mj_model)
 
     # Set actuator gains
-    offset = 10.0
+    offset = -10.0
     old_gains = mj_model.actuator_gainprm[:, 0]
     new_gains = old_gains + offset
     mj_model.actuator_gainprm[:, 0] = new_gains

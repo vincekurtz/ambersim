@@ -76,7 +76,7 @@ class BarkourConfig:
 
     # Encourage no motion at zero command, L2 regularization
     # |q - q_default|^2.
-    stand_still = -0.0  # -0.5
+    stand_still = -0.5  # -0.5
 
     # Early termination penalty (for falling down)
     termination = -10.0  # -1.0
@@ -362,7 +362,8 @@ class BarkourEnv(MjxEnv):
 
     def _reward_stand_still(self, commands: jax.Array, joint_angles: jax.Array, default_angles: jax.Array) -> jax.Array:
         # Penalize motion at zero commands
-        return jnp.sum(jnp.abs(joint_angles - default_angles)) * (math.normalize(commands[:2])[1] < 0.1)
+        # return jnp.sum(jnp.abs(joint_angles - default_angles)) * (math.normalize(commands[:2])[1] < 0.1)
+        return jnp.sum(jnp.abs(joint_angles - default_angles))
 
     def _get_feet_pos_vel(self, x: Transform, xd: Motion) -> Tuple[jax.Array, jax.Array]:
         offset = Transform.create(pos=self._feet_pos)
