@@ -158,7 +158,7 @@ class BarkourEnv(MjxEnv):
             "command": new_cmd,
             "last_contact": jnp.zeros(4, dtype=bool),
             "feet_air_time": jnp.zeros(4),
-            "obs_history": jnp.zeros(31 * self.config.obs_hist_len),
+            "obs_history": jnp.zeros(43 * self.config.obs_hist_len),
             "reward_tuple": {
                 "tracking_lin_vel": 0.0,
                 "tracking_ang_vel": 0.0,
@@ -176,7 +176,7 @@ class BarkourEnv(MjxEnv):
         }
 
         x, xd = self._pos_vel(data)
-        obs = self._get_obs(data.qpos, x, xd, state_info)
+        obs = self._get_obs(data.qpos, data.qvel, x, xd, state_info)
         reward, done = jnp.zeros(2)
         metrics = {"total_dist": 0.0}
         for k in state_info["reward_tuple"]:
@@ -196,7 +196,7 @@ class BarkourEnv(MjxEnv):
 
         # observation data
         x, xd = self._pos_vel(data)
-        obs = self._get_obs(data.qpos, x, xd, state.info)
+        obs = self._get_obs(data.qpos, data.qvel, x, xd, state.info)
         obs_noise = self.config.obs_noise * jax.random.uniform(rng_noise, obs.shape, minval=-1, maxval=1)
         qpos, qvel = data.qpos, data.qvel
         joint_angles = qpos[7:]
@@ -287,9 +287,11 @@ class BarkourEnv(MjxEnv):
     def compute_obs(self, data: mjx.Data, info: Dict[str, Any]) -> jax.Array:
         """Computes the observation from the state. See parent docstring."""
         x, xd = self._pos_vel(data)
-        return self._get_obs(data.qpos, x, xd, info)
+        return self._get_obs(data.qpos, data.qvel, x, xd, info)
 
-    def _get_obs(self, qpos: jax.Array, x: Transform, xd: Motion, state_info: Dict[str, Any]) -> jax.Array:
+    def _get_obs(
+        self, qpos: jax.Array, qvel: jax.Array, x: Transform, xd: Motion, state_info: Dict[str, Any]
+    ) -> jax.Array:
         # Get observations:
         # yaw_rate,  projected_gravity, command,  motor_angles, last_action
 
@@ -300,16 +302,25 @@ class BarkourEnv(MjxEnv):
         obs_list = []
         # yaw rate
         obs_list.append(jnp.array([local_rpyrate[2]]) * 0.25)
+
         # projected gravity
         obs_list.append(math.rotate(jnp.array([0.0, 0.0, -1.0]), inv_base_orientation))
+
         # command
         obs_list.append(cmd * jnp.array([2.0, 2.0, 0.25]))
-        # motor angles
-        angles = qpos[7:19]
-        obs_list.append(angles - self._default_ap_pose)
+
         # last action
         obs_list.append(state_info["last_act"])
 
+        # motor angles
+        motor_angles = qpos[7:19] - self._default_ap_pose
+        obs_list.append(motor_angles)
+
+        # motor velocities
+        motor_vels = qvel[6:18]
+        obs_list.append(motor_vels)
+
+        # put all observations in an array
         obs = jnp.clip(jnp.concatenate(obs_list), -100.0, 100.0)
 
         # stack observations through time

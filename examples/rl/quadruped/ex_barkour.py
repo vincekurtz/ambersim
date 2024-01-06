@@ -46,8 +46,8 @@ def train():
     # Create policy and value networks
     # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
     # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [256, 128, nz]})
-    # policy_network = MLP(layer_sizes=(128,) * 2 + (2 * (nu + nz),))
-    policy_network = MLP(layer_sizes=(2 * (nu + nz),))
+    policy_network = MLP(layer_sizes=(128,) * 2 + (2 * (nu + nz),))
+    # policy_network = MLP(layer_sizes=(2 * (nu + nz),))
 
     value_network = MLP(layer_sizes=(256,) * 5 + (1,))
 
@@ -188,7 +188,7 @@ def test():
     mj_data = mujoco.MjData(mj_model)
 
     # Set actuator gains
-    offset = 0.0
+    offset = 5.0
     old_gains = mj_model.actuator_gainprm[:, 0]
     new_gains = old_gains + offset
     mj_model.actuator_gainprm[:, 0] = new_gains
