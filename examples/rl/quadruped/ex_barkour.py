@@ -39,11 +39,11 @@ def train():
     # Observation, action, and lifted state sizes for the controller system
     ny = 31 * 1
     nu = 12
-    nz = 0
+    nz = 32
 
     # Initialize the environment
-    # envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
-    envs.register_environment("barkour", BarkourEnv)
+    envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
+    # envs.register_environment("barkour", BarkourEnv)
 
     # Create policy and value networks
     # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
@@ -56,7 +56,7 @@ def train():
     network_wrapper = BraxPPONetworksWrapper(
         policy_network=policy_network,
         value_network=value_network,
-        action_distribution=NormalTanhDistribution,
+        action_distribution=NormalDistribution,
     )
 
     # Domain randomization function
@@ -106,7 +106,7 @@ def train():
     # Define the training function
     train_fn = functools.partial(
         ppo.train,
-        num_timesteps=100_000_000,
+        num_timesteps=50_000_000,
         num_evals=10,
         reward_scaling=1,
         episode_length=1000,
@@ -303,7 +303,8 @@ def test():
 def make_video():
     """Make a video of the trained policy."""
     # Create an environment for evaluation
-    envs.register_environment("barkour", BarkourEnv)
+    nz = 32
+    envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
     env = envs.get_environment("barkour")
 
     # Load the saved policy
@@ -330,9 +331,10 @@ def make_video():
     jit_step = jax.jit(env.step)
 
     # initialize the state
+    print("Initializing...")
     rng = jax.random.PRNGKey(0)
     state = jit_reset(rng)
-    state.info["command"] = jnp.array([1.0, 0.1, -0.2])
+    state.info["command"] = jnp.array([1.0, 0.1, 0.2])
     rollout = [state.pipeline_state]
 
     # Simulate a trajectory

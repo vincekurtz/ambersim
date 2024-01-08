@@ -1,8 +1,9 @@
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional, Sequence
 
 import brax
 import jax
 import jax.numpy as jnp
+import numpy as np
 from mujoco import mjx
 
 from ambersim.rl.base import MjxEnv, State
@@ -119,6 +120,18 @@ class RecurrentWrapper(MjxEnv):
         y = self.env.compute_obs(data, info)
         z = info["z"]
         return jnp.concatenate([z, y])
+
+    def render(self, trajectory: List[State], camera: Optional[str] = None) -> Sequence[np.ndarray]:
+        """Render the environment for creating a video.
+
+        Args:
+            trajectory: the trajectory to render
+            camera: the camera to use for rendering
+
+        Returns:
+            images: the rendered images
+        """
+        return self.env.render(trajectory, camera)
 
     @property
     def dt(self) -> jax.Array:
