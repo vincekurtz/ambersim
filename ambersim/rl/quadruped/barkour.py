@@ -64,7 +64,7 @@ class BarkourConfig:
     default_base_height = 0.21
 
     # L2 regularization of joint torques, |tau|^2.
-    torques = -0.0  # -0.002
+    torques = -0.002  # -0.002
 
     # Penalize the change in the action and encourage smooth
     # actions. L2 regularization |action - last_action|^2
@@ -82,7 +82,7 @@ class BarkourConfig:
     termination = -20  # -1.0
 
     # Penalizing foot slipping on the ground.
-    foot_slip = -0.0  # -0.1
+    foot_slip = -0.1  # -0.1
 
 
 class BarkourEnv(MjxEnv):

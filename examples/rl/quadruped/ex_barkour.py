@@ -198,6 +198,11 @@ def test():
     new_friction = 1.0 * old_friction
     mj_model.geom_friction[:, 0] = new_friction
 
+    # Use more accurate dynamics than we do for training
+    mj_model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON
+    mj_model.opt.iterations = 6
+    mj_model.opt.ls_iterations = 10
+
     # Set the command and initial state
     mj_data.qpos = mj_model.keyframe("standing").qpos
     state = env.reset(jax.random.PRNGKey(0))
