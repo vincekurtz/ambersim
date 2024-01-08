@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -286,11 +286,6 @@ class BarkourEnv(MjxEnv):
         done = jnp.float32(done)
         state = state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward, done=done)
         return state
-
-    def compute_obs(self, data: mjx.Data, info: Dict[str, Any]) -> jax.Array:
-        """Computes the observation from the state. See parent docstring."""
-        x, xd = self._pos_vel(data)
-        return self._get_obs(data.qpos, data.qvel, x, xd, info)
 
     def _get_obs(
         self,

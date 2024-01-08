@@ -6,11 +6,13 @@ from datetime import datetime
 
 import jax
 import jax.numpy as jnp
+import mediapy as media
 import mujoco
 import mujoco.viewer
-import numpy as np
 from brax import envs
+from brax.base import Motion, Transform
 from brax.io import model
+from brax.mjx.base import State
 from brax.training.acme import running_statistics
 from brax.training.agents.ppo import train as ppo
 from brax.training.agents.ppo.networks import make_inference_fn
@@ -169,9 +171,10 @@ def test():
     # Create an environment for evaluation
     print("Creating test environment...")
     nz = 0
-    envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
+    # envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
+    envs.register_environment("barkour", BarkourEnv)
     env = envs.get_environment("barkour")
-    mj_model = env.model
+    mj_model = env._model
     mj_data = mujoco.MjData(mj_model)
 
     # Set actuator gains
@@ -191,11 +194,10 @@ def test():
     mj_model.opt.ls_iterations = 10
 
     # Set the command and initial state
-    mj_data.qpos = mj_model.keyframe("standing").qpos
+    mj_data.qpos = mj_model.keyframe("home").qpos
     state = env.reset(jax.random.PRNGKey(0))
     state.info["command"] = jnp.array([0.0, 0.0, 0.0])
     state.info["z"] = jnp.zeros(nz)
-    obs = env.compute_obs(mjx.device_put(mj_data), state.info)
 
     # Define a callback to set the command
     paused = False
@@ -256,23 +258,38 @@ def test():
     policy = make_policy(params, deterministic=True)
     jit_policy = jax.jit(policy)
 
+    # Create the observation function
+    print("Creating observation function...")
+
+    @jax.jit
+    def get_obs(mjx_data, state, obs_history):
+        """Returns an observation from the simulation state."""
+        pipeline_state = env.pipeline_init(jnp.array(mjx_data.qpos), jnp.array(mjx_data.qvel))
+        obs = env._get_obs(pipeline_state, state.info, obs_history)
+        return obs
+
+    # Get an initial observation
+    obs = jnp.zeros(31 * env.config.obs_hist_len)
+
     # Run a little sim
     rng = jax.random.PRNGKey(0)
-    q_stand = mj_model.keyframe("standing").qpos[7:]
+    q_stand = mj_model.keyframe("home").qpos[7:]
     with mujoco.viewer.launch_passive(mj_model, mj_data, key_callback=key_callback) as viewer:
         while viewer.is_running():
             if not paused:
                 step_start = time.time()
                 act_rng, rng = jax.random.split(rng)
 
+                # Update the observation
+                obs = get_obs(mjx.device_put(mj_data), state, obs)
+
                 # Apply the policy
                 act, _ = jit_policy(obs, act_rng)
                 state.info["z"] = act[:nz]
                 mj_data.ctrl[:] = q_stand + 0.3 * act[nz:]
-                obs = env.compute_obs(mjx.device_put(mj_data), state.info)
 
                 # Step the simulation
-                for _ in range(env._physics_steps_per_control_step):
+                for _ in range(env._n_frames):
                     mujoco.mj_step(mj_model, mj_data)
                     viewer.sync()
 
@@ -283,8 +300,58 @@ def test():
                     time.sleep(dt - elapsed)
 
 
+def make_video():
+    """Make a video of the trained policy."""
+    # Create an environment for evaluation
+    envs.register_environment("barkour", BarkourEnv)
+    env = envs.get_environment("barkour")
+
+    # Load the saved policy
+    print("Loading policy ...")
+    params_path = "/tmp/barkour_params.pkl"
+    networks_path = "/tmp/barkour_networks.pkl"
+    params = model.load_params(params_path)
+    with open(networks_path, "rb") as f:
+        network_wrapper = pickle.load(f)
+
+    # Create the policy function
+    print("Creating policy network...")
+    ppo_networks = network_wrapper.make_ppo_networks(
+        observation_size=env.observation_size,
+        action_size=env.action_size,
+        preprocess_observations_fn=running_statistics.normalize,
+    )
+    make_policy = make_inference_fn(ppo_networks)
+    policy = make_policy(params, deterministic=True)
+    jit_policy = jax.jit(policy)
+
+    # Create step and reset functions
+    jit_reset = jax.jit(env.reset)
+    jit_step = jax.jit(env.step)
+
+    # initialize the state
+    rng = jax.random.PRNGKey(0)
+    state = jit_reset(rng)
+    state.info["command"] = jnp.array([1.0, 0.1, -0.2])
+    rollout = [state.pipeline_state]
+
+    # Simulate a trajectory
+    print("Simulating...")
+    n_steps = 500
+    render_every = 2
+    for _ in range(n_steps):
+        act_rng, rng = jax.random.split(rng)
+        act, _ = jit_policy(state.obs, act_rng)
+        state = jit_step(state, act)
+        rollout.append(state.pipeline_state)
+
+    fname = "/tmp/barkour.mp4"
+    print(f"Writing to {fname}...")
+    media.write_video(fname, env.render(rollout[::render_every], camera="track"), fps=1.0 / env.dt / render_every)
+
+
 if __name__ == "__main__":
-    usage_str = "Usage: python ex_barkour.py [train|test]"
+    usage_str = "Usage: python ex_barkour.py [train|test|video]"
 
     if len(sys.argv) < 2:
         print(usage_str)
@@ -294,6 +361,8 @@ if __name__ == "__main__":
         train()
     elif sys.argv[1] == "test":
         test()
+    elif sys.argv[1] == "video":
+        make_video()
     else:
         print(usage_str)
         sys.exit(1)
