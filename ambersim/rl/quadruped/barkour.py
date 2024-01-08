@@ -102,8 +102,8 @@ class BarkourEnv(MjxEnv):
 
         # Set solver parameters
         mj_model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON
-        mj_model.opt.iterations = 4
-        mj_model.opt.ls_iterations = 6
+        mj_model.opt.iterations = 1
+        mj_model.opt.ls_iterations = 4
 
         super().__init__(
             mj_model,

@@ -61,8 +61,8 @@ def train():
     def domain_randomize(sys, rng):
         """Randomize over friction and actuator gains."""
         friction_range = (0.6, 1.4)
-        gain_range = (-5, 5)
-        bias_range = (-0.1, 0.1)
+        gain_range = (-2, 2)
+        bias_range = (-2, 2)
 
         @jax.vmap
         def rand(rng):
@@ -188,7 +188,7 @@ def test():
     mj_data = mujoco.MjData(mj_model)
 
     # Set actuator gains
-    offset = 5.0
+    offset = 0.0
     old_gains = mj_model.actuator_gainprm[:, 0]
     new_gains = old_gains + offset
     mj_model.actuator_gainprm[:, 0] = new_gains
