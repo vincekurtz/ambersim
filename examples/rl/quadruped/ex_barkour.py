@@ -40,13 +40,13 @@ def train():
     nz = 0
 
     # Initialize the environment
-    envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
-    # envs.register_environment("barkour", BarkourEnv)
+    # envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
+    envs.register_environment("barkour", BarkourEnv)
 
     # Create policy and value networks
     # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
     # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [256, 128, nz]})
-    policy_network = MLP(layer_sizes=(128,) * 2 + (2 * (nu + nz),))
+    policy_network = MLP(layer_sizes=(128,) * 4 + (2 * (nu + nz),))
     # policy_network = MLP(layer_sizes=(2 * (nu + nz),))
 
     value_network = MLP(layer_sizes=(256,) * 5 + (1,))
@@ -54,15 +54,14 @@ def train():
     network_wrapper = BraxPPONetworksWrapper(
         policy_network=policy_network,
         value_network=value_network,
-        action_distribution=NormalDistribution,
+        action_distribution=NormalTanhDistribution,
     )
 
     # Domain randomization function
     def domain_randomize(sys, rng):
         """Randomize over friction and actuator gains."""
         friction_range = (0.6, 1.4)
-        gain_range = (-2, 2)
-        bias_range = (-2, 2)
+        gain_range = (-5, 5)
 
         @jax.vmap
         def rand(rng):
@@ -73,17 +72,11 @@ def train():
 
             # actuator gains
             _, key = jax.random.split(key, 2)
-            gain_param = (
+            param = (
                 jax.random.uniform(key, (1,), minval=gain_range[0], maxval=gain_range[1]) + sys.actuator_gainprm[:, 0]
             )
-            gain = sys.actuator_gainprm.at[:, 0].set(gain_param)
-
-            # actuator bias
-            _, key = jax.random.split(key, 2)
-            bias_param = (
-                jax.random.uniform(key, (1,), minval=bias_range[0], maxval=bias_range[1]) + sys.actuator_biasprm[:, 1]
-            )
-            bias = sys.actuator_biasprm.at[:, 1].set(bias_param)
+            gain = sys.actuator_gainprm.at[:, 0].set(param)
+            bias = sys.actuator_biasprm.at[:, 1].set(-param)
 
             return friction, gain, bias
 
@@ -108,30 +101,24 @@ def train():
 
         return sys, in_axes
 
-    num_timesteps = 3_000_000
-    eval_every = 100_000
-
     # Define the training function
     train_fn = functools.partial(
         ppo.train,
-        num_timesteps=num_timesteps,
-        num_evals=num_timesteps // eval_every,
+        num_timesteps=100_000_000,
+        num_evals=10,
         reward_scaling=1,
         episode_length=1000,
         normalize_observations=True,
         action_repeat=1,
         unroll_length=20,
-        num_minibatches=8,
-        gae_lambda=0.95,
+        num_minibatches=32,
         num_updates_per_batch=4,
-        discounting=0.99,
+        discounting=0.97,
         learning_rate=3e-4,
-        entropy_cost=1e-5,  # 1e-2
-        num_envs=4096,  # 8192
-        batch_size=1024,
+        entropy_cost=1e-2,
+        num_envs=8192,
+        batch_size=256,
         network_factory=network_wrapper.make_ppo_networks,
-        clipping_epsilon=0.2,
-        num_resets_per_eval=10,
         randomization_fn=domain_randomize,
         seed=0,
     )
