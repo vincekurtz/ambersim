@@ -39,7 +39,7 @@ def train():
     # Observation, action, and lifted state sizes for the controller system
     ny = 31 * 1
     nu = 12
-    nz = 32
+    nz = 64
 
     # Initialize the environment
     envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
@@ -47,8 +47,8 @@ def train():
 
     # Create policy and value networks
     # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
-    # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [256, 128, nz]})
-    policy_network = MLP(layer_sizes=(128,) * 4 + (2 * (nu + nz),))
+    policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [128, 128, nz]})
+    # policy_network = MLP(layer_sizes=(128,) * 4 + (2 * (nu + nz),))
     # policy_network = MLP(layer_sizes=(2 * (nu + nz),))
 
     value_network = MLP(layer_sizes=(256,) * 5 + (1,))
@@ -106,7 +106,7 @@ def train():
     # Define the training function
     train_fn = functools.partial(
         ppo.train,
-        num_timesteps=50_000_000,
+        num_timesteps=300_000_000,
         num_evals=10,
         reward_scaling=1,
         episode_length=1000,
@@ -170,7 +170,7 @@ def test():
     """Load a trained policy and run a little sim with it."""
     # Create an environment for evaluation
     print("Creating test environment...")
-    nz = 0
+    nz = 64
     # envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
     envs.register_environment("barkour", BarkourEnv)
     env = envs.get_environment("barkour")
@@ -303,7 +303,7 @@ def test():
 def make_video():
     """Make a video of the trained policy."""
     # Create an environment for evaluation
-    nz = 32
+    nz = 64
     envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
     env = envs.get_environment("barkour")
 
