@@ -37,9 +37,9 @@ https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/mjx/tu
 def train():
     """Train a quadruped barkour agent."""
     # Observation, action, and lifted state sizes for the controller system
-    ny = 31 * 1
+    ny = 103 * 1
     nu = 12
-    nz = 0
+    nz = 64
 
     # Initialize the environment
     envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
@@ -306,7 +306,7 @@ def test():
 def make_video():
     """Make a video of the trained policy."""
     # Create an environment for evaluation
-    nz = 0
+    nz = 64
     envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
     env = envs.get_environment("barkour")
 
