@@ -298,13 +298,6 @@ class BarkourEnv(MjxEnv):
         c = jnp.cos(q_legs)
         s = jnp.sin(q_legs)
 
-        # Foot positions and velocities
-        foot_pos = pipeline_state.data.site_xpos[self._feet_site_id]
-        feet_offset = foot_pos - pipeline_state.data.xpos[self._lower_leg_body_id]
-        offset = Transform.create(pos=feet_offset)
-        foot_indices = self._lower_leg_body_id - 1  # we got rid of the world body
-        foot_vel = offset.vmap().do(pipeline_state.xd.take(foot_indices)).vel
-
         # Put together the observation vector
         obs = jnp.concatenate(
             [
@@ -318,8 +311,6 @@ class BarkourEnv(MjxEnv):
                 c * s,  # cos of joint angles times sin of joint angles
                 c * v_legs,  # cos of joint angles times joint velocities
                 s * v_legs,  # sin of joint angles times joint velocities
-                # foot_pos.reshape(-1),  # foot positions
-                # foot_vel.reshape(-1),  # foot velocities
                 state_info["last_act"],  # last action
             ]
         )
