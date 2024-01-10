@@ -191,6 +191,10 @@ def test():
     mj_data = mujoco.MjData(mj_model)
     mj_data.qpos = mj_model.keyframe("home").qpos
 
+    # Set physics parameters to be more realistic
+    mj_model.opt.iterations = 100
+    mj_model.opt.ls_iterations = 50
+
     # Create the policy function
     print("Creating policy network...")
     ppo_networks = network_wrapper.make_ppo_networks(
@@ -256,17 +260,17 @@ def test():
         elif keycode == 263:
             # Left arrow decreases the yaw velocity target
             command += jnp.array([0.0, 0.0, 0.1])
-        elif keycode == 326:
-            # number pad right arrow (4) increases the side velocity target
-            command += jnp.array([0.0, 0.1, 0.0])
         elif keycode == 324:
-            # number pad left arrow (6) decreases the side velocity target
+            # number pad right arrow (4) moves to the right
+            command += jnp.array([0.0, 0.1, 0.0])
+        elif keycode == 326:
+            # number pad left arrow (6) moves to the left
             command -= jnp.array([0.0, 0.1, 0.0])
         else:
             print("keycode: ", keycode)
 
         # Clip the command to the allowed range
-        min_cmd = jnp.array([-0.6, 0.0, -0.7])
+        min_cmd = jnp.array([-0.6,-0.6, -0.7])
         max_cmd = jnp.array([1.0, 0.6, 0.7])
         command = jnp.clip(command, min_cmd, max_cmd)
         print("Command: ", command)
@@ -279,14 +283,15 @@ def test():
         while viewer.is_running():
             if not paused:
                 step_start = time.time()
-                act_rng, rng = jax.random.split(rng)
+                obs_rng, act_rng, rng = jax.random.split(rng, 3)
 
                 # Get an observation
                 obs = get_obs(mj_data, command, last_act, z)
+                obs += 0.05 * jax.random.uniform(obs_rng, obs.shape, minval=-1.0, maxval=1.0)
 
                 # Take an action
                 act, _ = jit_policy(obs, act_rng)
-                mj_data.ctrl[:] = default_pose + 0.3 * act[nz:]
+                mj_data.ctrl[:] = jnp.clip(default_pose + 0.3 * act[nz:], env.env.lowers, env.env.uppers)
                 last_act = act[nz:]
                 z = act[:nz]
 
