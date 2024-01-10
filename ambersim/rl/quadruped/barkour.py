@@ -188,7 +188,7 @@ class BarkourEnv(MjxEnv):
             "step": 0,
         }
 
-        obs_history = jnp.zeros(103 * self.config.obs_hist_len)
+        obs_history = jnp.zeros(39 * self.config.obs_hist_len)
         obs = self._get_obs(pipeline_state, state_info, obs_history)
         reward, done = jnp.zeros(2)
         metrics = {"total_dist": 0.0}
@@ -289,12 +289,12 @@ class BarkourEnv(MjxEnv):
 
     def _get_obs(self, pipeline_state: State, state_info: dict[str, Any], obs_history: jax.Array) -> jax.Array:
         # base rotation and angular velocity
-        inv_torso_rot = math.quat_inv(pipeline_state.x.rot[0])
-        local_rpyrate = math.rotate(pipeline_state.xd.ang[0], inv_torso_rot)
+        # inv_torso_rot = math.quat_inv(pipeline_state.x.rot[0])
+        # local_rpyrate = math.rotate(pipeline_state.xd.ang[0], inv_torso_rot)
 
         # Leg positions and velocities
         q_legs = pipeline_state.q[7:] - self._default_pose
-        v_legs = pipeline_state.qd[6:]
+        # v_legs = pipeline_state.qd[6:]
         c = jnp.cos(q_legs)
         s = jnp.sin(q_legs)
 
@@ -305,13 +305,13 @@ class BarkourEnv(MjxEnv):
                 # math.rotate(jnp.array([0, 0, -1]), inv_torso_rot),  # projected gravity
                 state_info["command"] * jnp.array([2.0, 2.0, 0.25]),  # command
                 q_legs,  # joint angles
-                v_legs,  # joint velocities
+                #v_legs,  # joint velocities
                 c,  # cos of joint angles
                 s,  # sin of joint angles
-                c * s,  # cos of joint angles times sin of joint angles
-                c * v_legs,  # cos of joint angles times joint velocities
-                s * v_legs,  # sin of joint angles times joint velocities
-                state_info["last_act"],  # last action
+                # c * s,  # cos of joint angles times sin of joint angles
+                #c * v_legs,  # cos of joint angles times joint velocities
+                #s * v_legs,  # sin of joint angles times joint velocities
+                #state_info["last_act"],  # last action
             ]
         )
 
