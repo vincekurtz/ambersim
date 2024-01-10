@@ -4,6 +4,7 @@ import sys
 import time
 from datetime import datetime
 
+import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import mediapy as media
@@ -37,9 +38,9 @@ https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/mjx/tu
 def train():
     """Train a quadruped barkour agent."""
     # Observation, action, and lifted state sizes for the controller system
-    ny = 103 * 1
+    ny = 99
     nu = 12
-    nz = 64
+    nz = 32
 
     # Initialize the environment
     envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
@@ -49,7 +50,7 @@ def train():
     # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
     # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [128, 128, nz]})
     # policy_network = MLP(layer_sizes=(128,) * 4 + (2 * (nu + nz),))
-    policy_network = MLP(layer_sizes=(2 * (nu + nz),))
+    policy_network = MLP(layer_sizes=(2 * (nu + nz),), activate_final=False)
 
     value_network = MLP(layer_sizes=(256,) * 5 + (1,))
 
@@ -306,7 +307,7 @@ def test():
 def make_video():
     """Make a video of the trained policy."""
     # Create an environment for evaluation
-    nz = 64
+    nz = 32
     envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
     env = envs.get_environment("barkour")
 

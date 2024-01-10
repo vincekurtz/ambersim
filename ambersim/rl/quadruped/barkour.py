@@ -301,8 +301,8 @@ class BarkourEnv(MjxEnv):
         # Put together the observation vector
         obs = jnp.concatenate(
             [
-                jnp.array([local_rpyrate[2]]) * 0.25,  # yaw rate
-                math.rotate(jnp.array([0, 0, -1]), inv_torso_rot),  # projected gravity
+                # jnp.array([local_rpyrate[2]]) * 0.25,  # yaw rate
+                # math.rotate(jnp.array([0, 0, -1]), inv_torso_rot),  # projected gravity
                 state_info["command"] * jnp.array([2.0, 2.0, 0.25]),  # command
                 q_legs,  # joint angles
                 v_legs,  # joint velocities
