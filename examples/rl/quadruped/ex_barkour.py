@@ -189,6 +189,7 @@ def test():
     # Create a mujoco model
     mj_model = env.env._model
     mj_data = mujoco.MjData(mj_model)
+    mj_data.qpos = mj_model.keyframe("home").qpos
 
     # Create the policy function
     print("Creating policy network...")
@@ -201,19 +202,34 @@ def test():
     policy = make_policy(params, deterministic=True)
     jit_policy = jax.jit(policy)
 
-    # Create step and reset functions
-    jit_reset = jax.jit(env.reset)
-    jit_step = jax.jit(env.step)
+    # Define an observation function
+    def get_obs(mj_data, command, last_act, z):
+        """Returns the observation vector."""
+        q_legs = jnp.array(mj_data.qpos[7:19] - env.env._default_pose)
+        v_legs = jnp.array(mj_data.qvel[6:18])
+        c = jnp.cos(q_legs)
+        s = jnp.sin(q_legs)
 
-    # Initialize the MJX state
-    print("Initializing...")
-    rng = jax.random.PRNGKey(0)
-    state = jit_reset(rng)
-    state.info["command"] = jnp.array([1.0, 0.0, 0.0])
+        return jnp.concatenate(
+            [
+                z,
+                command * jnp.array([2.0, 2.0, 0.25]),
+                q_legs,
+                v_legs,
+                c,
+                s,
+                c * s,
+                c * v_legs,
+                s * v_legs,
+                last_act,
+            ]
+        )
 
-    # Set the initial mujoco state
-    mj_data.qpos = state.pipeline_state.q
-    mj_data.qvel = state.pipeline_state.qd
+    # Define an initial command, controller state, and prior action
+    print("Getting initial observation...")
+    z = jnp.zeros(nz)  # (lifted) state of the controller system
+    last_act = jnp.zeros(12)  # prior action
+    command = jnp.array([0.0, 0.0, 0.0])  # commanded velocity
 
     # Define a keyboard callback to set the command
     paused = False
@@ -221,65 +237,63 @@ def test():
     def key_callback(keycode):
         """Sets the command velocity based on the keyboard."""
         nonlocal paused
-        nonlocal state
+        nonlocal command
 
         if chr(keycode) == " ":
             # Spacebar pauses the sim and resets the command to zero
             paused = not paused
-            state.info["command"] = jnp.array([0.0, 0.0, 0.0])
+            command = jnp.array([0.0, 0.0, 0.0])
 
         elif keycode == 265:
             # Up arrow increases the forward velocity target
-            state.info["command"] += jnp.array([0.1, 0.0, 0.0])
+            command += jnp.array([0.1, 0.0, 0.0])
         elif keycode == 264:
             # Down arrow decreases the forward velocity target
-            state.info["command"] -= jnp.array([0.1, 0.0, 0.0])
+            command -= jnp.array([0.1, 0.0, 0.0])
         elif keycode == 262:
             # Right arrow increases the yaw velocity target
-            state.info["command"] -= jnp.array([0.0, 0.0, 0.1])
+            command -= jnp.array([0.0, 0.0, 0.1])
         elif keycode == 263:
             # Left arrow decreases the yaw velocity target
-            state.info["command"] += jnp.array([0.0, 0.0, 0.1])
+            command += jnp.array([0.0, 0.0, 0.1])
         elif keycode == 326:
             # number pad right arrow (4) increases the side velocity target
-            state.info["command"] += jnp.array([0.0, 0.1, 0.0])
+            command += jnp.array([0.0, 0.1, 0.0])
         elif keycode == 324:
             # number pad left arrow (6) decreases the side velocity target
-            state.info["command"] -= jnp.array([0.0, 0.1, 0.0])
+            command -= jnp.array([0.0, 0.1, 0.0])
         else:
             print("keycode: ", keycode)
 
         # Clip the command to the allowed range
         min_cmd = jnp.array([-0.6, 0.0, -0.7])
         max_cmd = jnp.array([1.0, 0.6, 0.7])
-        state.info["command"] = jnp.clip(state.info["command"], min_cmd, max_cmd)
-        print("Command: ", state.info["command"])
+        command = jnp.clip(command, min_cmd, max_cmd)
+        print("Command: ", command)
 
     # Run the sim
     print("Running...")
+    rng = jax.random.PRNGKey(0)
+    default_pose = mj_model.keyframe("home").qpos[7:19]
     with mujoco.viewer.launch_passive(mj_model, mj_data, key_callback=key_callback) as viewer:
         while viewer.is_running():
             if not paused:
                 step_start = time.time()
                 act_rng, rng = jax.random.split(rng)
 
+                # Get an observation
+                obs = get_obs(mj_data, command, last_act, z)
+
                 # Take an action
-                act, _ = jit_policy(state.obs, act_rng)
-                state = jit_step(state, act)
-
-                # Update the mujoco state
-                mj_data.qpos = state.pipeline_state.q
-                mj_data.qvel = state.pipeline_state.qd
-                mj_data.ctrl[:] = act[nz:]
-
-                print(mj_data.qpos[:3])
+                act, _ = jit_policy(obs, act_rng)
+                mj_data.ctrl[:] = default_pose + 0.3 * act[nz:]
+                last_act = act[nz:]
+                z = act[:nz]
 
                 # Step the simulation
-                mujoco.mj_step(mj_model, mj_data)
-                viewer.sync()
-                # for _ in range(env._n_frames):
-                #    mujoco.mj_step(mj_model, mj_data)
-                #    viewer.sync()
+                for _ in range(env.env._n_frames):
+                    mujoco.mj_step(mj_model, mj_data)
+                    viewer.sync()
 
                 # Try to run in roughly real time
                 elapsed = time.time() - step_start
