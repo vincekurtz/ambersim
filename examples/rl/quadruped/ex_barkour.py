@@ -174,36 +174,48 @@ def test():
     """Load a trained policy and run a little sim with it."""
     # Create an environment for evaluation
     print("Creating test environment...")
-    nz = 64
-    # envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
-    envs.register_environment("barkour", BarkourEnv)
+    nz = 32
+    envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
     env = envs.get_environment("barkour")
-    mj_model = env._model
+
+    # Load the saved policy
+    print("Loading policy ...")
+    params_path = "/tmp/barkour_params.pkl"
+    networks_path = "/tmp/barkour_networks.pkl"
+    params = model.load_params(params_path)
+    with open(networks_path, "rb") as f:
+        network_wrapper = pickle.load(f)
+
+    # Create a mujoco model
+    mj_model = env.env._model
     mj_data = mujoco.MjData(mj_model)
 
-    # Set actuator gains
-    offset = 0.0
-    old_gains = mj_model.actuator_gainprm[:, 0]
-    new_gains = old_gains + offset
-    mj_model.actuator_gainprm[:, 0] = new_gains
+    # Create the policy function
+    print("Creating policy network...")
+    ppo_networks = network_wrapper.make_ppo_networks(
+        observation_size=env.observation_size,
+        action_size=env.action_size,
+        preprocess_observations_fn=running_statistics.normalize,
+    )
+    make_policy = make_inference_fn(ppo_networks)
+    policy = make_policy(params, deterministic=True)
+    jit_policy = jax.jit(policy)
 
-    # Set friction
-    old_friction = mj_model.geom_friction[:, 0]
-    new_friction = 1.0 * old_friction
-    mj_model.geom_friction[:, 0] = new_friction
+    # Create step and reset functions
+    jit_reset = jax.jit(env.reset)
+    jit_step = jax.jit(env.step)
 
-    # Use more accurate dynamics than we do for training
-    mj_model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON
-    mj_model.opt.iterations = 6
-    mj_model.opt.ls_iterations = 10
+    # Initialize the MJX state
+    print("Initializing...")
+    rng = jax.random.PRNGKey(0)
+    state = jit_reset(rng)
+    state.info["command"] = jnp.array([1.0, 0.0, 0.0])
 
-    # Set the command and initial state
-    mj_data.qpos = mj_model.keyframe("home").qpos
-    state = env.reset(jax.random.PRNGKey(0))
-    state.info["command"] = jnp.array([0.0, 0.0, 0.0])
-    state.info["z"] = jnp.zeros(nz)
+    # Set the initial mujoco state
+    mj_data.qpos = state.pipeline_state.q
+    mj_data.qvel = state.pipeline_state.qd
 
-    # Define a callback to set the command
+    # Define a keyboard callback to set the command
     paused = False
 
     def key_callback(keycode):
@@ -243,59 +255,31 @@ def test():
         state.info["command"] = jnp.clip(state.info["command"], min_cmd, max_cmd)
         print("Command: ", state.info["command"])
 
-    # Load the saved policy
-    print("Loading policy ...")
-    params_path = "/tmp/barkour_params.pkl"
-    networks_path = "/tmp/barkour_networks.pkl"
-    params = model.load_params(params_path)
-    with open(networks_path, "rb") as f:
-        network_wrapper = pickle.load(f)
-
-    # Create the policy function
-    print("Creating policy network...")
-    ppo_networks = network_wrapper.make_ppo_networks(
-        observation_size=env.observation_size,
-        action_size=env.action_size,
-        preprocess_observations_fn=running_statistics.normalize,
-    )
-    make_policy = make_inference_fn(ppo_networks)
-    policy = make_policy(params, deterministic=True)
-    jit_policy = jax.jit(policy)
-
-    # Create the observation function
-    print("Creating observation function...")
-
-    @jax.jit
-    def get_obs(mjx_data, state, obs_history):
-        """Returns an observation from the simulation state."""
-        pipeline_state = env.pipeline_init(jnp.array(mjx_data.qpos), jnp.array(mjx_data.qvel))
-        obs = env._get_obs(pipeline_state, state.info, obs_history)
-        return obs
-
-    # Get an initial observation
-    obs = jnp.zeros(31 * env.config.obs_hist_len)
-
-    # Run a little sim
-    rng = jax.random.PRNGKey(0)
-    q_stand = mj_model.keyframe("home").qpos[7:]
+    # Run the sim
+    print("Running...")
     with mujoco.viewer.launch_passive(mj_model, mj_data, key_callback=key_callback) as viewer:
         while viewer.is_running():
             if not paused:
                 step_start = time.time()
                 act_rng, rng = jax.random.split(rng)
 
-                # Update the observation
-                obs = get_obs(mjx.device_put(mj_data), state, obs)
+                # Take an action
+                act, _ = jit_policy(state.obs, act_rng)
+                state = jit_step(state, act)
 
-                # Apply the policy
-                act, _ = jit_policy(obs, act_rng)
-                state.info["z"] = act[:nz]
-                mj_data.ctrl[:] = q_stand + 0.3 * act[nz:]
+                # Update the mujoco state
+                mj_data.qpos = state.pipeline_state.q
+                mj_data.qvel = state.pipeline_state.qd
+                mj_data.ctrl[:] = act[nz:]
+
+                print(mj_data.qpos[:3])
 
                 # Step the simulation
-                for _ in range(env._n_frames):
-                    mujoco.mj_step(mj_model, mj_data)
-                    viewer.sync()
+                mujoco.mj_step(mj_model, mj_data)
+                viewer.sync()
+                # for _ in range(env._n_frames):
+                #    mujoco.mj_step(mj_model, mj_data)
+                #    viewer.sync()
 
                 # Try to run in roughly real time
                 elapsed = time.time() - step_start
