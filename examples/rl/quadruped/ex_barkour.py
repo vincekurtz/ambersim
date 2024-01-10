@@ -104,7 +104,7 @@ def train():
 
         return sys, in_axes
 
-    num_timesteps = 200_000_000
+    num_timesteps = 500_000_000
     eval_every = 10_000_000
 
     # Define the training function

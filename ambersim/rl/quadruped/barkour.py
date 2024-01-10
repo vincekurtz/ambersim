@@ -188,7 +188,7 @@ class BarkourEnv(MjxEnv):
             "step": 0,
         }
 
-        obs_history = jnp.zeros(39 * self.config.obs_hist_len)
+        obs_history = jnp.zeros(99 * self.config.obs_hist_len)
         obs = self._get_obs(pipeline_state, state_info, obs_history)
         reward, done = jnp.zeros(2)
         metrics = {"total_dist": 0.0}
@@ -294,7 +294,7 @@ class BarkourEnv(MjxEnv):
 
         # Leg positions and velocities
         q_legs = pipeline_state.q[7:] - self._default_pose
-        # v_legs = pipeline_state.qd[6:]
+        v_legs = pipeline_state.qd[6:]
         c = jnp.cos(q_legs)
         s = jnp.sin(q_legs)
 
@@ -305,13 +305,13 @@ class BarkourEnv(MjxEnv):
                 # math.rotate(jnp.array([0, 0, -1]), inv_torso_rot),  # projected gravity
                 state_info["command"] * jnp.array([2.0, 2.0, 0.25]),  # command
                 q_legs,  # joint angles
-                #v_legs,  # joint velocities
+                v_legs,  # joint velocities
                 c,  # cos of joint angles
                 s,  # sin of joint angles
-                # c * s,  # cos of joint angles times sin of joint angles
-                #c * v_legs,  # cos of joint angles times joint velocities
-                #s * v_legs,  # sin of joint angles times joint velocities
-                #state_info["last_act"],  # last action
+                c * s,  # cos of joint angles times sin of joint angles
+                c * v_legs,  # cos of joint angles times joint velocities
+                s * v_legs,  # sin of joint angles times joint velocities
+                state_info["last_act"],  # last action
             ]
         )
 
