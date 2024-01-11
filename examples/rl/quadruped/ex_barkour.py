@@ -187,13 +187,16 @@ def test():
         network_wrapper = pickle.load(f)
 
     # Create a mujoco model
-    mj_model = env.env._model
+    # N.B. this is different from the scene_mjx.xml model used for training
+    mj_model = load_mj_model_from_file("models/barkour/scene_terrain.xml")
     mj_data = mujoco.MjData(mj_model)
     mj_data.qpos = mj_model.keyframe("home").qpos
 
-    # Set physics parameters to be more realistic
-    mj_model.opt.iterations = 100
-    mj_model.opt.ls_iterations = 50
+    # Set model parameters to match the MJX model
+    mj_model.opt.timestep = 0.004
+    mj_model.dof_damping[6:] = 0.5239
+    mj_model.actuator_gainprm[:, 0] = 35.0
+    mj_model.actuator_biasprm[:, 1] = -35.0
 
     # Create the policy function
     print("Creating policy network...")
@@ -270,7 +273,7 @@ def test():
             print("keycode: ", keycode)
 
         # Clip the command to the allowed range
-        min_cmd = jnp.array([-0.6,-0.6, -0.7])
+        min_cmd = jnp.array([-0.6, -0.6, -0.7])
         max_cmd = jnp.array([1.0, 0.6, 0.7])
         command = jnp.clip(command, min_cmd, max_cmd)
         print("Command: ", command)
