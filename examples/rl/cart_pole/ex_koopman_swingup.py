@@ -43,7 +43,7 @@ def train():
     ny = 8  # observations are degree-2 polynomials of [cart_pos, cos(theta), sin(theta), cart_vel, theta_dot]
     nu = 1  # control input is [cart_force]
     # policy_network = MLP(layer_sizes=[128, 128, 2 * (nz + nu)])
-    # policy_network = MLP(layer_sizes=[2 * (nz + nu)], bias=False)
+    # policy_network = MLP(layer_sizes=[2 * (nz + nu)], bias=True)
     policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
     # policy_network = BilinearSystemPolicy(nz=nz, ny=ny, nu=nu)
     # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [16, 16, nz]})
@@ -56,8 +56,8 @@ def train():
     )
 
     # Set the number of training steps and evaluations
-    num_timesteps = 10_000_000
-    eval_every = 100_000
+    num_timesteps = 30_000_000
+    eval_every = 1_000_000
 
     # Create the PPO agent
     print("Creating PPO agent...")
@@ -69,14 +69,14 @@ def train():
         reward_scaling=0.1,
         normalize_observations=True,
         action_repeat=1,
-        unroll_length=10,
-        num_minibatches=64,
-        num_updates_per_batch=16,
+        unroll_length=20,
+        num_minibatches=32,
+        num_updates_per_batch=4,
         discounting=0.97,
         learning_rate=3e-4,
         entropy_cost=1e-5,
-        num_envs=1024,
-        batch_size=512,
+        num_envs=8192,
+        batch_size=256,
         clipping_epsilon=0.3,
         network_factory=network_wrapper.make_ppo_networks,
         seed=0,
