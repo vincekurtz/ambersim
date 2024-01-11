@@ -273,7 +273,7 @@ def test():
             print("keycode: ", keycode)
 
         # Clip the command to the allowed range
-        min_cmd = jnp.array([-0.6, -0.6, -0.7])
+        min_cmd = jnp.array([-0.6,-0.6, -0.7])
         max_cmd = jnp.array([1.0, 0.6, 0.7])
         command = jnp.clip(command, min_cmd, max_cmd)
         print("Command: ", command)
