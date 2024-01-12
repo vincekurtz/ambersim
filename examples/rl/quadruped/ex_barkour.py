@@ -47,10 +47,10 @@ def train():
     # envs.register_environment("barkour", BarkourEnv)
 
     # Create policy and value networks
-    # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
+    policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
     # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [128, 128, nz]})
     # policy_network = MLP(layer_sizes=(128,) * 4 + (2 * (nu + nz),))
-    policy_network = MLP(layer_sizes=(2 * (nu + nz),), activate_final=False)
+    # policy_network = MLP(layer_sizes=(2 * (nu + nz),), activate_final=False)
 
     value_network = MLP(layer_sizes=(256,) * 5 + (1,))
 
@@ -273,7 +273,7 @@ def test():
             print("keycode: ", keycode)
 
         # Clip the command to the allowed range
-        min_cmd = jnp.array([-0.6,-0.6, -0.7])
+        min_cmd = jnp.array([-0.6, -0.6, -0.7])
         max_cmd = jnp.array([1.0, 0.6, 0.7])
         command = jnp.clip(command, min_cmd, max_cmd)
         print("Command: ", command)
