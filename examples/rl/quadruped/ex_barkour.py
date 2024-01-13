@@ -38,7 +38,7 @@ https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/mjx/tu
 def train():
     """Train a quadruped barkour agent."""
     # Observation, action, and lifted state sizes for the controller system
-    ny = 99
+    ny = 51
     nu = 12
     nz = 32
 
