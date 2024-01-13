@@ -10,6 +10,7 @@ import jax.numpy as jnp
 import mediapy as media
 import mujoco
 import mujoco.viewer
+import pygame
 from brax import envs
 from brax.base import Motion, Transform
 from brax.io import model
@@ -237,81 +238,68 @@ def test():
         )
 
     # Define an initial command, controller state, and prior action
-    print("Getting initial observation...")
     z = jnp.zeros(nz)  # (lifted) state of the controller system
     last_act = jnp.zeros(12)  # prior action
     command = jnp.array([0.0, 0.0, 0.0])  # commanded velocity
 
-    # Define a keyboard callback to set the command
-    paused = False
+    # Set up a joystick to control the sim
+    print("Looking for joystick...")
+    pygame.init()
+    has_joystick = False
+    joystick = None
 
-    def key_callback(keycode):
-        """Sets the command velocity based on the keyboard."""
-        nonlocal paused
-        nonlocal command
+    if pygame.joystick.get_count() > 0 and pygame.joystick.Joystick(0).get_numaxes() >= 4:
+        has_joystick = True
+        joystick = pygame.joystick.Joystick(0)
+        print("Connected to joystick", joystick.get_name())
+    else:
+        # If there's no joystick, just set the forward command to do
+        # something kind of interesting
+        print("No joystick detected: setting forward command to 1 m/s.")
+        command = jnp.array([1.0, 0.0, 0.0])
 
-        if chr(keycode) == " ":
-            # Spacebar pauses the sim and resets the command to zero
-            paused = not paused
-            command = jnp.array([0.0, 0.0, 0.0])
-
-        elif keycode == 265:
-            # Up arrow increases the forward velocity target
-            command += jnp.array([0.1, 0.0, 0.0])
-        elif keycode == 264:
-            # Down arrow decreases the forward velocity target
-            command -= jnp.array([0.1, 0.0, 0.0])
-        elif keycode == 262:
-            # Right arrow increases the yaw velocity target
-            command -= jnp.array([0.0, 0.0, 0.1])
-        elif keycode == 263:
-            # Left arrow decreases the yaw velocity target
-            command += jnp.array([0.0, 0.0, 0.1])
-        elif keycode == 324:
-            # number pad right arrow (4) moves to the right
-            command += jnp.array([0.0, 0.1, 0.0])
-        elif keycode == 326:
-            # number pad left arrow (6) moves to the left
-            command -= jnp.array([0.0, 0.1, 0.0])
-        else:
-            print("keycode: ", keycode)
-
-        # Clip the command to the allowed range
-        min_cmd = jnp.array([-0.6, -0.6, -0.7])
-        max_cmd = jnp.array([1.0, 0.6, 0.7])
-        command = jnp.clip(command, min_cmd, max_cmd)
-        print("Command: ", command)
+    min_cmd = jnp.array([-0.8, -0.8, -0.7])
+    max_cmd = jnp.array([1.0, 0.8, 0.7])
 
     # Run the sim
     print("Running...")
     rng = jax.random.PRNGKey(0)
     default_pose = mj_model.keyframe("home").qpos[7:19]
-    with mujoco.viewer.launch_passive(mj_model, mj_data, key_callback=key_callback) as viewer:
+    with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
         while viewer.is_running():
-            if not paused:
-                step_start = time.time()
-                obs_rng, act_rng, rng = jax.random.split(rng, 3)
+            step_start = time.time()
+            obs_rng, act_rng, rng = jax.random.split(rng, 3)
 
-                # Get an observation
-                obs = get_obs(mj_data, command, last_act, z)
-                obs += 0.05 * jax.random.uniform(obs_rng, obs.shape, minval=-1.0, maxval=1.0)
+            # Update the command based on the joystick, if available
+            if has_joystick:
+                pygame.event.pump()
+                yaw = -joystick.get_axis(0)
+                sideways = -joystick.get_axis(2)
+                forward = -joystick.get_axis(3)
+                command = jnp.array([forward, sideways, yaw])
+                command = jnp.clip(command, min_cmd, max_cmd)
+                print(command)
 
-                # Take an action
-                act, _ = jit_policy(obs, act_rng)
-                mj_data.ctrl[:] = jnp.clip(default_pose + 0.3 * act[nz:], env.env.lowers, env.env.uppers)
-                last_act = act[nz:]
-                z = act[:nz]
+            # Get an observation
+            obs = get_obs(mj_data, command, last_act, z)
+            obs += 0.05 * jax.random.uniform(obs_rng, obs.shape, minval=-1.0, maxval=1.0)
 
-                # Step the simulation
-                for _ in range(env.env._n_frames):
-                    mujoco.mj_step(mj_model, mj_data)
-                    viewer.sync()
+            # Take an action
+            act, _ = jit_policy(obs, act_rng)
+            mj_data.ctrl[:] = jnp.clip(default_pose + 0.3 * act[nz:], env.env.lowers, env.env.uppers)
+            last_act = act[nz:]
+            z = act[:nz]
 
-                # Try to run in roughly real time
-                elapsed = time.time() - step_start
-                dt = float(env.dt)
-                if elapsed < dt:
-                    time.sleep(dt - elapsed)
+            # Step the simulation
+            for _ in range(env.env._n_frames):
+                mujoco.mj_step(mj_model, mj_data)
+                viewer.sync()
+
+            # Try to run in roughly real time
+            elapsed = time.time() - step_start
+            dt = float(env.dt)
+            if elapsed < dt:
+                time.sleep(dt - elapsed)
 
 
 def make_video():
