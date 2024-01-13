@@ -188,7 +188,7 @@ class BarkourEnv(MjxEnv):
             "step": 0,
         }
 
-        obs_history = jnp.zeros(51 * self.config.obs_hist_len)
+        obs_history = jnp.zeros(55 * self.config.obs_hist_len)
         obs = self._get_obs(pipeline_state, state_info, obs_history)
         reward, done = jnp.zeros(2)
         metrics = {"total_dist": 0.0}
@@ -289,8 +289,8 @@ class BarkourEnv(MjxEnv):
 
     def _get_obs(self, pipeline_state: State, state_info: dict[str, Any], obs_history: jax.Array) -> jax.Array:
         # base rotation and angular velocity
-        # inv_torso_rot = math.quat_inv(pipeline_state.x.rot[0])
-        # local_rpyrate = math.rotate(pipeline_state.xd.ang[0], inv_torso_rot)
+        inv_torso_rot = math.quat_inv(pipeline_state.x.rot[0])
+        local_rpyrate = math.rotate(pipeline_state.xd.ang[0], inv_torso_rot)
 
         # Leg positions and velocities
         q_legs = pipeline_state.q[7:] - self._default_pose
@@ -301,8 +301,8 @@ class BarkourEnv(MjxEnv):
         # Put together the observation vector
         obs = jnp.concatenate(
             [
-                # jnp.array([local_rpyrate[2]]) * 0.25,  # yaw rate
-                # math.rotate(jnp.array([0, 0, -1]), inv_torso_rot),  # projected gravity
+                jnp.array([local_rpyrate[2]]),  # yaw rate
+                math.rotate(jnp.array([0, 0, -1]), inv_torso_rot),  # projected gravity
                 state_info["command"],  # * jnp.array([2.0, 2.0, 0.25]),  # command
                 q_legs,  # joint angles
                 v_legs,  # joint velocities

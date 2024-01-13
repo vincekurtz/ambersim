@@ -38,7 +38,7 @@ https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/mjx/tu
 def train():
     """Train a quadruped barkour agent."""
     # Observation, action, and lifted state sizes for the controller system
-    ny = 51
+    ny = 55
     nu = 12
     nz = 32
 
@@ -47,10 +47,10 @@ def train():
     # envs.register_environment("barkour", BarkourEnv)
 
     # Create policy and value networks
-    policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
+    # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
     # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [128, 128, nz]})
     # policy_network = MLP(layer_sizes=(128,) * 4 + (2 * (nu + nz),))
-    # policy_network = MLP(layer_sizes=(2 * (nu + nz),), activate_final=False)
+    policy_network = MLP(layer_sizes=(2 * (nu + nz),), activate_final=False)
 
     value_network = MLP(layer_sizes=(256,) * 5 + (1,))
 
