@@ -217,18 +217,22 @@ def test():
         c = jnp.cos(q_legs)
         s = jnp.sin(q_legs)
 
+        # Yaw rate
+        yaw_rate = jnp.array([0])
+
+        # Projected gravity
+        projected_gravity = jnp.array([0, 0, -1])
+
         return jnp.concatenate(
             [
                 z,
-                command * jnp.array([2.0, 2.0, 0.25]),
+                yaw_rate,
+                projected_gravity,
+                command,
                 q_legs,
                 v_legs,
                 c,
                 s,
-                c * s,
-                c * v_legs,
-                s * v_legs,
-                last_act,
             ]
         )
 
