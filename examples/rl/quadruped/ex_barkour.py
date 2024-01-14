@@ -282,7 +282,7 @@ def test():
 
             # Get an observation
             obs = get_obs(mj_data, command, last_act, z)
-            obs += 0.05 * jax.random.uniform(obs_rng, obs.shape, minval=-1.0, maxval=1.0)
+            # obs += 0.05 * jax.random.uniform(obs_rng, obs.shape, minval=-1.0, maxval=1.0)
 
             # Take an action
             act, _ = jit_policy(obs, act_rng)
