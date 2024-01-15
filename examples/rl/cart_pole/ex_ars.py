@@ -12,8 +12,8 @@ import numpy as np
 from brax import envs
 from brax.io import model
 from brax.training.acme import running_statistics
-from brax.training.agents.ppo import train as ppo
 from brax.training.agents.ars import train as ars
+from brax.training.agents.ppo import train as ppo
 from brax.training.agents.ppo.networks import make_inference_fn
 from mujoco import mjx
 from tensorboardX import SummaryWriter
@@ -26,7 +26,7 @@ from ambersim.rl.helpers import BraxPPONetworksWrapper
 from ambersim.utils.io_utils import load_mj_model_from_file
 
 """
-Perform cart-pole swingup with a Koopman linear system policy, trained with 
+Perform cart-pole swingup with a Koopman linear system policy, trained with
 Augmented Random Search (ARS).
 """
 
@@ -40,47 +40,23 @@ def train():
     envs.register_environment("cart_pole", RecurrentWrapper.env_factory(CartPoleSwingupEnv, nz=nz))
     env = envs.get_environment("cart_pole")
 
-    # Create the policy and value networks
-    print("Creating policy network...")
-    ny = 8  # observations are degree-2 polynomials of [cart_pos, cos(theta), sin(theta), cart_vel, theta_dot]
-    nu = 1  # control input is [cart_force]
-    # policy_network = MLP(layer_sizes=[128, 128, 2 * (nz + nu)])
-    policy_network = MLP(layer_sizes=[2 * (nz + nu)], bias=True)
-    # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
-    # policy_network = BilinearSystemPolicy(nz=nz, ny=ny, nu=nu)
-    # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [16, 16, nz]})
-
-    value_network = MLP(layer_sizes=[128, 128, 1])
-    network_wrapper = BraxPPONetworksWrapper(
-        policy_network=policy_network,
-        value_network=value_network,
-        action_distribution=NormalDistribution,
-    )
-
     # Set the number of training steps and evaluations
-    num_timesteps = 50_000_000
+    num_timesteps = 150_000_000
     eval_every = 1_000_000
 
-    # Create the PPO agent
-    print("Creating PPO agent...")
+    # Create the ARS agent
+    print("Creating ARS agent...")
     train_fn = functools.partial(
-        ppo.train,
+        ars.train,
         num_timesteps=num_timesteps,
         num_evals=num_timesteps // eval_every,
         episode_length=200,
-        reward_scaling=0.1,
+        number_of_directions=60,
+        top_directions=20,
+        step_size=0.02,
+        num_eval_envs=256,
+        exploration_noise_std=0.03,
         normalize_observations=True,
-        action_repeat=1,
-        unroll_length=20,
-        num_minibatches=32,
-        num_updates_per_batch=4,
-        discounting=0.97,
-        learning_rate=3e-4,
-        entropy_cost=1e-5,
-        num_envs=8192,
-        batch_size=256,
-        clipping_epsilon=0.3,
-        network_factory=network_wrapper.make_ppo_networks,
         seed=0,
     )
 
@@ -115,10 +91,7 @@ def train():
     # Save the trained policy
     print("Saving trained policy...")
     params_path = "/tmp/cart_pole_params.pkl"
-    networks_path = "/tmp/cart_pole_networks.pkl"
     model.save_params(params_path, params)
-    with open(networks_path, "wb") as f:
-        pickle.dump(network_wrapper, f)
 
 
 def test(start_angle=0.0):
