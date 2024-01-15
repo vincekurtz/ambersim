@@ -230,7 +230,6 @@ def test():
                 yaw_rate,
                 projected_gravity,
                 command,
-                q_legs,
                 v_legs,
                 c,
                 s,
@@ -258,7 +257,7 @@ def test():
         print("No joystick detected: setting forward command to 1 m/s.")
         command = jnp.array([1.0, 0.0, 0.0])
 
-    min_cmd = jnp.array([-0.8, -0.8, -0.7])
+    min_cmd = jnp.array([-0.6, -0.8, -0.7])
     max_cmd = jnp.array([1.0, 0.8, 0.7])
 
     # Run the sim
