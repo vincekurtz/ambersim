@@ -11,7 +11,7 @@ import mediapy as media
 import mujoco
 import mujoco.viewer
 import pygame
-from brax import envs
+from brax import envs, math
 from brax.base import Motion, Transform
 from brax.io import model
 from brax.mjx.base import State
@@ -218,11 +218,16 @@ def test():
         c = jnp.cos(q_legs)
         s = jnp.sin(q_legs)
 
-        # Yaw rate
-        yaw_rate = jnp.array([0])
-
-        # Projected gravity
-        projected_gravity = jnp.array([0, 0, -1])
+        # Yaw rate and projected gravity
+        x = Transform(pos=mj_data.xpos[1:], rot=mj_data.xquat[1:])
+        cvel = Motion(vel=mj_data.cvel[1:, 3:], ang=mj_data.cvel[1:, :3])
+        offset = mj_data.xpos[1:, :] - mj_data.subtree_com[mj_model.body_rootid[1:]]
+        offset = Transform.create(pos=offset)
+        xd = offset.vmap().do(cvel)
+        inv_torso_rot = math.quat_inv(x.rot[0])
+        local_rpyrate = math.rotate(xd.ang[0], inv_torso_rot)
+        yaw_rate = jnp.array([local_rpyrate[2]])
+        projected_gravity = math.rotate(jnp.array([0, 0, -1]), inv_torso_rot)
 
         return jnp.concatenate(
             [
@@ -277,7 +282,6 @@ def test():
                 forward = -joystick.get_axis(3)
                 command = jnp.array([forward, sideways, yaw])
                 command = jnp.clip(command, min_cmd, max_cmd)
-                print(command)
 
             # Get an observation
             obs = get_obs(mj_data, command, last_act, z)
