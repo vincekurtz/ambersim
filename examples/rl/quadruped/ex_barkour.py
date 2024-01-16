@@ -38,21 +38,16 @@ https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/mjx/tu
 
 def train():
     """Train a quadruped barkour agent."""
-    # Observation, action, and lifted state sizes for the controller system
-    ny = 55
-    nu = 12
+    # Lifted state size and control dimension
     nz = 32
+    nu = 12
 
     # Initialize the environment
     envs.register_environment("barkour", RecurrentWrapper.env_factory(BarkourEnv, nz=nz))
-    # envs.register_environment("barkour", BarkourEnv)
 
     # Create policy and value networks
-    # policy_network = LinearSystemPolicy(nz=nz, ny=ny, nu=nu)
-    # policy_network = LiftedInputLinearSystemPolicy(nz=nz, ny=ny, nu=nu, phi_kwargs={"layer_sizes": [128, 128, nz]})
     # policy_network = MLP(layer_sizes=(128,) * 4 + (2 * (nu + nz),))
-    policy_network = MLP(layer_sizes=(2 * (nu + nz),), activate_final=False)
-
+    policy_network = MLP(layer_sizes=(2 * (nu + nz),))  # linear
     value_network = MLP(layer_sizes=(256,) * 5 + (1,))
 
     network_wrapper = BraxPPONetworksWrapper(
@@ -105,7 +100,7 @@ def train():
 
         return sys, in_axes
 
-    num_timesteps = 500_000_000
+    num_timesteps = 1_000_000_000
     eval_every = 10_000_000
 
     # Define the training function
@@ -211,7 +206,7 @@ def test():
     jit_policy = jax.jit(policy)
 
     # Define an observation function
-    def get_obs(mj_data, command, last_act, z):
+    def get_obs(mj_data, command, z):
         """Returns the observation vector."""
         q_legs = jnp.array(mj_data.qpos[7:19] - env.env._default_pose)
         v_legs = jnp.array(mj_data.qvel[6:18])
@@ -241,9 +236,21 @@ def test():
             ]
         )
 
+    # Standard deviation of the observation noise
+    obs_noise_std = jnp.concatenate(
+        [
+            jnp.zeros(nz),  # controller's lifted state is noise-free
+            0.1 * jnp.ones(1),  # yaw rate is noisy
+            0.1 * jnp.ones(3),  # projected gravity is noisy
+            jnp.zeros(3),  # command is noise-free
+            0.05 * jnp.ones(12),  # leg velocities are noisy
+            0.001 * jnp.ones(12),  # cosines have small noise
+            0.001 * jnp.ones(12),  # sines have small noise
+        ]
+    )
+
     # Define an initial command, controller state, and prior action
     z = jnp.zeros(nz)  # (lifted) state of the controller system
-    last_act = jnp.zeros(12)  # prior action
     command = jnp.array([0.0, 0.0, 0.0])  # commanded velocity
 
     # Set up a joystick to control the sim
@@ -284,13 +291,12 @@ def test():
                 command = jnp.clip(command, min_cmd, max_cmd)
 
             # Get an observation
-            obs = get_obs(mj_data, command, last_act, z)
-            # obs += 0.05 * jax.random.uniform(obs_rng, obs.shape, minval=-1.0, maxval=1.0)
+            obs = get_obs(mj_data, command, z)
+            obs += jax.random.normal(obs_rng, obs.shape) * obs_noise_std
 
             # Take an action
             act, _ = jit_policy(obs, act_rng)
             mj_data.ctrl[:] = jnp.clip(default_pose + 0.3 * act[nz:], env.env.lowers, env.env.uppers)
-            last_act = act[nz:]
             z = act[:nz]
 
             # Step the simulation
