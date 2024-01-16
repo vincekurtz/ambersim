@@ -19,7 +19,7 @@
   </asset>
 
   <asset>
-    <hfield file="./assets/fractal_noise.png" size="5 5 0.2 2" />
+    <hfield file="./assets/fractal_noise.png" size="5 5 0.3 2" />
     <texture type="2d" file="./assets/martian.png"/>
     <material name="martian" texture="martian"/>
   </asset>

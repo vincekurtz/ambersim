@@ -188,11 +188,14 @@ def test():
     mj_data = mujoco.MjData(mj_model)
     mj_data.qpos = mj_model.keyframe("home").qpos
 
-    # Set model parameters to match the MJX model
+    # Set model parameters to roughly match the MJX model
     mj_model.opt.timestep = 0.004
-    mj_model.dof_damping[6:] = 0.5239
+    mj_model.dof_damping[6:] = 0.5
     mj_model.actuator_gainprm[:, 0] = 35.0
     mj_model.actuator_biasprm[:, 1] = -35.0
+
+    # modify friction
+    mj_model.geom_friction[:, 0] = 1.5
 
     # Create the policy function
     print("Creating policy network...")
@@ -267,7 +270,7 @@ def test():
         # If there's no joystick, just set the forward command to do
         # something kind of interesting
         print("No joystick detected: setting forward command to 1 m/s.")
-        command = jnp.array([1.0, 0.0, 0.0])
+        command = jnp.array([1.0, 0.3, -0.5])
 
     min_cmd = jnp.array([-0.6, -0.8, -0.7])
     max_cmd = jnp.array([1.0, 0.8, 0.7])
