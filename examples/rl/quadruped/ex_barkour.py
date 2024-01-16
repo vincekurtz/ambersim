@@ -10,6 +10,7 @@ import jax.numpy as jnp
 import mediapy as media
 import mujoco
 import mujoco.viewer
+import numpy as np
 import pygame
 from brax import envs, math
 from brax.base import Motion, Transform
@@ -164,6 +165,138 @@ def train():
     model.save_params(params_path, params)
     with open(networks_path, "wb") as f:
         pickle.dump(network_wrapper, f)
+
+
+def test_cpu():
+    """Load a trained linear policy and run a sim on CPU only (no jax)."""
+    # Load the saved policy
+    params_path = "/tmp/barkour_params.pkl"
+    with open(params_path, "rb") as f:
+        params = pickle.load(f)
+
+    # Check that the params are for a linear model
+    assert len(params[1]["params"].keys()) == 1, "test_cpu() only works for linear policies"
+    assert list(params[1]["params"].keys())[0] == "dense_0", "test_cpu() only works for linear policies"
+
+    # Get observation normalization parameters
+    obs_mean = params[0].mean
+    obs_std = params[0].std
+
+    # Get the linear policy parameters. Recall that the original policy outputs
+    # both means and log standard deviations.
+    K = np.array(params[1]["params"]["dense_0"]["kernel"]).T
+    b = np.array(params[1]["params"]["dense_0"]["bias"])
+    num_means = K.shape[0] // 2
+    K = K[0:num_means, :]
+    b = b[0:num_means]
+    nz = b.shape[0] - 12
+
+    # Create a mujoco model
+    mj_model = load_mj_model_from_file("models/barkour/scene_terrain.xml")
+    mj_data = mujoco.MjData(mj_model)
+    mj_data.qpos = mj_model.keyframe("home").qpos
+    default_pose = mj_model.keyframe("home").qpos[7:19]
+
+    # Set model parameters to roughly match the MJX model
+    mj_model.opt.timestep = 0.004
+    mj_model.dof_damping[6:] = 0.5
+    mj_model.actuator_gainprm[:, 0] = 35.0
+    mj_model.actuator_biasprm[:, 1] = -35.0
+
+    # modify friction
+    # mj_model.geom_friction[:, 0] = 1.5
+
+    # Define an observation function
+    def get_obs(mj_data, command, z):
+        """Returns the observation vector."""
+        q_legs = np.array(mj_data.qpos[7:19] - default_pose)
+        v_legs = np.array(mj_data.qvel[6:18])
+        c = np.cos(q_legs)
+        s = np.sin(q_legs)
+
+        # Yaw rate and projected gravity
+        # TODO(vincekurtz): actually compute these
+        yaw_rate = np.array([0.0])
+        projected_gravity = np.array([0.0, 0.0, -1.0])
+
+        return jnp.concatenate(
+            [
+                z,
+                yaw_rate,
+                projected_gravity,
+                command,
+                v_legs,
+                c,
+                s,
+            ]
+        )
+
+    # Standard deviation of the observation noise
+    obs_noise_std = np.concatenate(
+        [
+            np.zeros(nz),  # controller's lifted state is noise-free
+            0.1 * np.ones(1),  # yaw rate is noisy
+            0.1 * np.ones(3),  # projected gravity is noisy
+            np.zeros(3),  # command is noise-free
+            0.05 * np.ones(12),  # leg velocities are noisy
+            0.001 * np.ones(12),  # cosines have small noise
+            0.001 * np.ones(12),  # sines have small noise
+        ]
+    )
+
+    # Define the command (user input) and controller state
+    z = np.zeros(nz)  # (lifted) state of the controller system
+    command = np.array([0.0, 0.0, 0.0])  # commanded velocity
+
+    # Connect to a joystick, if available
+    pygame.init()
+    has_joystick = False
+    joystick = None
+    if pygame.joystick.get_count() > 0 and pygame.joystick.Joystick(0).get_numaxes() >= 4:
+        has_joystick = True
+        joystick = pygame.joystick.Joystick(0)
+        print("Connected to joystick", joystick.get_name())
+    else:
+        print("No joystick detected: setting forward command to 1 m/s.")
+        command = np.array([1.0, 0.3, -0.5])
+
+    # Run the sim
+    physics_steps_per_control_step = 5
+    with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
+        while viewer.is_running():
+            step_start = time.time()
+
+            # Update the command based on the joystick, if available
+            if has_joystick:
+                pygame.event.pump()
+                yaw = -joystick.get_axis(0)
+                sideways = -joystick.get_axis(2)
+                forward = -joystick.get_axis(3)
+                command = np.array([forward, sideways, yaw])
+
+            # Get an observation ([z, y]) and normalize it
+            obs = get_obs(mj_data, command, z)
+            obs += np.random.normal(size=obs.shape) * obs_noise_std
+            obs = (obs - obs_mean) / obs_std
+
+            # Compute the action and advance the controller state
+            zu = K @ obs + b
+            z = zu[:nz]
+            u = zu[nz:]
+
+            # Apply the action to the robot
+            mj_data.ctrl[:] = default_pose + 0.3 * u
+
+            # Step the simulation
+            for _ in range(physics_steps_per_control_step):
+                mujoco.mj_step(mj_model, mj_data)
+                viewer.sync()
+
+            # Try to run in roughly real time
+            elapsed = time.time() - step_start
+            dt = float(mj_model.opt.timestep * physics_steps_per_control_step)
+            if elapsed < dt:
+                time.sleep(dt - elapsed)
 
 
 def test():
@@ -377,6 +510,8 @@ if __name__ == "__main__":
         train()
     elif sys.argv[1] == "test":
         test()
+    elif sys.argv[1] == "test_cpu":
+        test_cpu()
     elif sys.argv[1] == "video":
         make_video()
     else:
