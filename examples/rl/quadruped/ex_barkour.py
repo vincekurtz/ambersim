@@ -179,8 +179,8 @@ def test_cpu():
     assert list(params[1]["params"].keys())[0] == "dense_0", "test_cpu() only works for linear policies"
 
     # Get observation normalization parameters
-    obs_mean = params[0].mean
-    obs_std = params[0].std
+    obs_mean = np.array(params[0].mean)
+    obs_std = np.array(params[0].std)
 
     # Get the linear policy parameters. Recall that the original policy outputs
     # both means and log standard deviations.
@@ -204,7 +204,7 @@ def test_cpu():
     mj_model.actuator_biasprm[:, 1] = -35.0
 
     # modify friction
-    # mj_model.geom_friction[:, 0] = 1.5
+    mj_model.geom_friction[:, 0] = 1.5
 
     # Define an observation function
     def get_obs(mj_data, command, z):
@@ -219,7 +219,7 @@ def test_cpu():
         yaw_rate = np.array([0.0])
         projected_gravity = np.array([0.0, 0.0, -1.0])
 
-        return jnp.concatenate(
+        return np.concatenate(
             [
                 z,
                 yaw_rate,
